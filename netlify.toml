@@ -41,6 +41,48 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# URLs sin extensión: las páginas se sirven como /terms, /home... (Netlify ya las
+# resuelve sin ".html"). Estas reglas redirigen la versión con extensión a la limpia
+# para que nunca se vea ".html" en la barra de direcciones.
+# "force" es necesario porque el archivo .html existe realmente y, sin él, Netlify
+# serviría el archivo en vez de aplicar la redirección.
+# IMPORTANTE: no añadas reglas inversas (/terms -> /terms.html): provocarían un bucle.
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/home.html"
+  to = "/home"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/collection.html"
+  to = "/collection"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/deck-builder.html"
+  to = "/deck-builder"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/privacy.html"
+  to = "/privacy"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/terms.html"
+  to = "/terms"
+  status = 301
+  force = true
+
 # Cabeceras de seguridad básicas
 [[headers]]
   for = "/*"
@@ -48,3 +90,20 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Manifest con su tipo MIME correcto
+[[headers]]
+  for = "/site.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+
+# Iconos: caché de 1 día en el navegador (cambian muy rara vez)
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/favicon.ico"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

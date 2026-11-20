@@ -4,9 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mis mazos · TCG Manager</title>
-  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg">
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="DNK TCG Manager">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
   <header id="app-header"></header>
@@ -15,7 +20,7 @@
     <div class="page-title">
       <h1><span id="game-name">…</span> · Mis mazos</h1>
       <nav class="subnav">
-        <a href="home.html">← Todos los TCG</a>
+        <a href="/home">← Todos los TCG</a>
         <a id="nav-collection" href="#">Colección</a>
         <a id="nav-decks" class="active" href="#">Mazos</a>
       </nav>
@@ -74,6 +79,11 @@
     </div>
   </main>
 
-  <script type="module" src="js/deck-builder.js"></script>
+  <footer class="site-footer">
+    <a href="/terms">Condiciones del servicio</a>
+    <a href="/privacy">Política de privacidad</a>
+  </footer>
+
+  <script type="module" src="/js/deck-builder.js"></script>
 </body>
 </html>

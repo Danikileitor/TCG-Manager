@@ -1,4 +1,4 @@
-// Lógica de la página de login / registro (index.html)
+// Lógica de la página de login / registro (/)
 import { api } from './api.js';
 
 const tabs = document.querySelectorAll('.tab');
@@ -41,7 +41,7 @@ form.addEventListener('submit', async (e) => {
       const email = document.getElementById('email').value.trim();
       await api.post('/auth/register', { username: identifier, email, password });
     }
-    window.location.href = 'home.html';
+    window.location.href = '/home';
   } catch (err) {
     errorBox.textContent = err.message;
     submitBtn.disabled = false;
@@ -88,7 +88,7 @@ async function handleGoogleCredential(response) {
       showUsernameStep(result);
       return;
     }
-    window.location.href = 'home.html';
+    window.location.href = '/home';
   } catch (err) {
     errorBox.textContent = err.message;
   }
@@ -107,7 +107,7 @@ usernameForm.addEventListener('submit', async (e) => {
   usernameSubmit.disabled = true;
   try {
     await api.post('/auth/google', { credential: pendingCredential, username });
-    window.location.href = 'home.html';
+    window.location.href = '/home';
   } catch (err) {
     usernameError.textContent = err.message;
     usernameSubmit.disabled = false;
@@ -160,7 +160,7 @@ initGoogle();
 // Si ya hay sesión iniciada, vamos directos a la home
 api
   .get('/auth/me')
-  .then(() => window.location.replace('home.html'))
+  .then(() => window.location.replace('/home'))
   .catch(() => {});
 
 setMode('login');

@@ -12,7 +12,16 @@ exports.handler = async (event) => {
   try {
     const db = await getDb();
     const games = await getGames(db);
-    return json(200, { games });
+    // El navegador también la guarda 5 min (privada: la respuesta exige sesión) y puede
+    // servir la versión anterior hasta 1 día mientras se refresca en segundo plano.
+    return json(
+      200,
+      { games },
+      {
+        'Cache-Control': 'private, max-age=300, stale-while-revalidate=86400',
+        Vary: 'Cookie',
+      }
+    );
   } catch (err) {
     return serverError(err);
   }

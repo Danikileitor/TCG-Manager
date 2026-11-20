@@ -1,4 +1,4 @@
-// Constructor de mazos (deck-builder.html?game=...)
+// Constructor de mazos (/deck-builder?game=...)
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
@@ -358,8 +358,8 @@ async function init() {
 
   document.getElementById('game-name').textContent = game.name;
   const key = encodeURIComponent(game.key);
-  document.getElementById('nav-collection').href = `collection.html?game=${key}`;
-  document.getElementById('nav-decks').href = `deck-builder.html?game=${key}`;
+  document.getElementById('nav-collection').href = `/collection?game=${key}`;
+  document.getElementById('nav-decks').href = `/deck-builder?game=${key}`;
 
   // Formatos y zonas de destino según el TCG
   game.formats.forEach((f) => els.format.append(el('option', { value: f, text: f })));

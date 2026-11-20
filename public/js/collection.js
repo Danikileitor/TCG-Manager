@@ -1,4 +1,4 @@
-// Colección del usuario para un TCG (collection.html?game=...)
+// Colección del usuario para un TCG (/collection?game=...)
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
@@ -175,8 +175,8 @@ async function init() {
 
   document.getElementById('game-name').textContent = game.name;
   const key = encodeURIComponent(game.key);
-  document.getElementById('nav-collection').href = `collection.html?game=${key}`;
-  document.getElementById('nav-decks').href = `deck-builder.html?game=${key}`;
+  document.getElementById('nav-collection').href = `/collection?game=${key}`;
+  document.getElementById('nav-decks').href = `/deck-builder?game=${key}`;
 
   loadCollection();
 }

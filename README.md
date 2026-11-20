@@ -25,8 +25,10 @@ tcg-manager/
 │   ├── terms.html               # condiciones del servicio
 │   ├── css/  base.css · login.css · home.css · app.css · legal.css
 │   ├── js/   api.js · ui.js · session.js · auth.js · home.js
-│   │         collection.js · deck-builder.js · card-providers.js
-│   └── assets/img/logo.svg
+│   │         collection.js · deck-builder.js · card-providers.js · games-cache.js
+│   ├── site.webmanifest         # manifest de la web app (instalable)
+│   └── favicon.ico · favicon-96x96.png · apple-touch-icon.png
+│       web-app-manifest-192x192.png · web-app-manifest-512x512.png
 └── netlify/functions/           # backend serverless
     ├── _lib/ db.js · auth.js · http.js · games.js
     ├── auth-register.js · auth-login.js · auth-logout.js · auth-me.js
@@ -102,6 +104,17 @@ Reglas de cuentas:
 - `[TU EMAIL DE CONTACTO]`
 
 Y revisa que el texto refleja lo que realmente haces con los datos (si añades analítica, otros proveedores o una función de borrado de cuenta, actualízalas y cambia la fecha). Son textos de partida, no asesoramiento jurídico.
+
+## 6. URLs sin `.html`
+
+Las páginas se enlazan sin extensión (`/home`, `/collection?game=mtg`, `/deck-builder?game=mtg`, `/terms`, `/privacy`) y `netlify.toml` redirige (301) las versiones con `.html` a la limpia. **No añadas reglas inversas** (`/terms` → `/terms.html`): provocarían un bucle de redirecciones. Al crear una página nueva, enlázala sin extensión y añade su regla `.html` → limpia en `netlify.toml`.
+
+## 7. Rendimiento
+
+- **Lista de TCG en la home:** `public/js/games-cache.js` la guarda en `localStorage` (10 min). Con caché aparece al instante y sin peticiones; si está caducada, se muestra la guardada y se refresca en segundo plano. La sesión y los TCG se piden en paralelo.
+- **Servidor:** `/api/games` cachea la lista 5 min en memoria de la función y responde con `Cache-Control: private, max-age=300, stale-while-revalidate=86400`. Si añades un TCG nuevo, puede tardar hasta ~10 min en aparecer a quien ya tenga la caché.
+- **Iconos:** se sirven con caché de 1 día.
+- La primera petición tras un rato sin tráfico puede ser más lenta (arranque en frío de la función de Netlify y conexión a Atlas); no se puede evitar en el plan gratuito.
 
 ## Seguridad implementada
 

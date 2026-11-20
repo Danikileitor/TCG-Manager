@@ -1,6 +1,6 @@
 // Página principal: muestra los TCG disponibles
-import { api } from './api.js';
 import { requireSession } from './session.js';
+import { loadGames } from './games-cache.js';
 import { el, clear } from './ui.js';
 
 const grid = document.getElementById('game-grid');
@@ -15,10 +15,10 @@ function gameCard(game) {
     el(
       'div',
       { class: 'game-actions' },
-      el('a', { class: 'btn', href: `collection.html?game=${encodeURIComponent(game.key)}`, text: 'Mi colección' }),
+      el('a', { class: 'btn', href: `/collection?game=${encodeURIComponent(game.key)}`, text: 'Mi colección' }),
       el('a', {
         class: 'btn btn-ghost',
-        href: `deck-builder.html?game=${encodeURIComponent(game.key)}`,
+        href: `/deck-builder?game=${encodeURIComponent(game.key)}`,
         text: 'Mis mazos',
       })
     )
@@ -27,18 +27,26 @@ function gameCard(game) {
   return card;
 }
 
-async function init() {
-  const user = await requireSession();
-  document.getElementById('welcome').textContent = `Hola, ${user.username}`;
+function renderGames(games) {
+  clear(grid);
+  games.forEach((g) => grid.append(gameCard(g)));
+}
 
-  try {
-    const { games } = await api.get('/games');
-    clear(grid);
-    games.forEach((g) => grid.append(gameCard(g)));
-  } catch (err) {
-    clear(grid);
-    grid.append(el('div', { class: 'empty', text: `No se pudieron cargar los TCG: ${err.message}` }));
-  }
+function init() {
+  // La sesión y los TCG se piden EN PARALELO (antes iban uno detrás de otro).
+  // Con caché, los TCG aparecen al instante sin esperar a ninguna petición.
+  const sessionPromise = requireSession();
+
+  loadGames(renderGames)
+    .then(renderGames)
+    .catch((err) => {
+      clear(grid);
+      grid.append(el('div', { class: 'empty', text: `No se pudieron cargar los TCG: ${err.message}` }));
+    });
+
+  sessionPromise.then((user) => {
+    document.getElementById('welcome').textContent = `Hola, ${user.username}`;
+  });
 }
 
 init();

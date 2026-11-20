@@ -38,13 +38,25 @@ const DEFAULT_GAMES = [
 
 const VALID_GAME_KEYS = DEFAULT_GAMES.map((g) => g.key);
 
+// Caché en memoria de la instancia de la función: mientras la función siga "caliente"
+// no se consulta MongoDB en cada visita a la home (la lista casi nunca cambia).
+const CACHE_TTL_MS = 5 * 60 * 1000;
+let gamesCache = { games: null, at: 0 };
+
 async function getGames(db) {
+  if (gamesCache.games && Date.now() - gamesCache.at < CACHE_TTL_MS) {
+    return gamesCache.games;
+  }
+
   const col = db.collection('games');
   const count = await col.countDocuments();
   if (count === 0) {
-    await col.insertMany(DEFAULT_GAMES);
+    // Se insertan copias para no modificar DEFAULT_GAMES (insertMany añade _id)
+    await col.insertMany(DEFAULT_GAMES.map((g) => ({ ...g })));
   }
-  return col.find({ enabled: true }).sort({ order: 1 }).project({ _id: 0 }).toArray();
+  const games = await col.find({ enabled: true }).sort({ order: 1 }).project({ _id: 0 }).toArray();
+  gamesCache = { games, at: Date.now() };
+  return games;
 }
 
 module.exports = { DEFAULT_GAMES, VALID_GAME_KEYS, getGames };

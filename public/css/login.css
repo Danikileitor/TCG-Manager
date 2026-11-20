@@ -1,9 +1,20 @@
 /* ===== Página de login / registro ===== */
-.login-page {
-  min-height: 100vh;
+.login-main {
+  flex: 1;
   display: grid;
   place-items: center;
   padding: 1.5rem;
+}
+
+.login-logo {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 0.8rem;
+  border-radius: 22px;
+}
+
+.login-page {
   background:
     radial-gradient(900px 500px at 15% 10%, rgba(124, 58, 237, 0.25), transparent 60%),
     radial-gradient(800px 500px at 90% 90%, rgba(8, 145, 178, 0.22), transparent 60%),
@@ -88,18 +99,6 @@
 
 .step-cancel {
   margin-top: 0.6rem;
-}
-
-.legal-note {
-  margin: 1.4rem 0 0;
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.legal-note a {
-  color: var(--text-muted);
-  text-decoration: underline;
 }
 
 /* ----- Inicio de sesión con Google ----- */
