@@ -1,5 +1,5 @@
 # 🃏 TCG Manager
-[![License: GPL v3](https://shields.io)](https://gnu.org)
+[![GitHub license](https://img.shields.io/github/license/Danikileitor/TCG-Manager.png)](https://github.com/Danikileitor/TCG-Manager/blob/main/LICENSE)
 
 **TCG Manager** is an all-in-one collection tracker and deck builder designed for players of multiple Trading Card Games. Organize your binders, track your inventory, and build competitive or casual decks across different games in a single platform.
 
