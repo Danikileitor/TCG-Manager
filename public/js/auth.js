@@ -48,6 +48,57 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
+// ---------- Inicio de sesión con Google (Google Identity Services) ----------
+const googleSection = document.getElementById('google-section');
+const googleBtn = document.getElementById('google-btn');
+
+async function handleGoogleCredential(response) {
+  errorBox.textContent = '';
+  try {
+    // "credential" es un ID token firmado por Google; el servidor lo verifica
+    await api.post('/auth/google', { credential: response.credential });
+    window.location.href = 'home.html';
+  } catch (err) {
+    errorBox.textContent = err.message;
+  }
+}
+
+function renderGoogleButton(clientId) {
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback: handleGoogleCredential,
+    ux_mode: 'popup',
+  });
+  window.google.accounts.id.renderButton(googleBtn, {
+    theme: 'filled_black',
+    size: 'large',
+    shape: 'pill',
+    text: 'continue_with',
+    locale: 'es',
+    width: 320,
+  });
+  googleSection.classList.remove('hidden');
+}
+
+async function initGoogle() {
+  let clientId = null;
+  try {
+    ({ googleClientId: clientId } = await api.get('/auth/config'));
+  } catch (err) {
+    return; // sin configuración: se oculta el botón y el login normal sigue funcionando
+  }
+  if (!clientId) return;
+
+  if (window.google && window.google.accounts) {
+    renderGoogleButton(clientId);
+  } else {
+    // El script de Google se carga en diferido: esperamos a que termine
+    document.getElementById('gsi-script').addEventListener('load', () => renderGoogleButton(clientId));
+  }
+}
+
+initGoogle();
+
 // Si ya hay sesión iniciada, vamos directos a la home
 api
   .get('/auth/me')

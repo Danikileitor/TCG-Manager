@@ -26,8 +26,10 @@ exports.handler = async (event) => {
       $or: [{ email: identifier }, { username: new RegExp(`^${escapeRegex(identifier)}$`, 'i') }],
     });
 
-    const ok = await bcrypt.compare(password, user ? user.passwordHash : DUMMY_HASH);
-    if (!user || !ok) {
+    // Las cuentas creadas con Google no tienen contraseña (passwordHash null)
+    const hash = user && user.passwordHash ? user.passwordHash : DUMMY_HASH;
+    const ok = await bcrypt.compare(password, hash);
+    if (!user || !user.passwordHash || !ok) {
       // Mensaje genérico: no revelamos si el usuario existe
       return json(401, { error: 'Credenciales incorrectas' });
     }

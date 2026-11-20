@@ -1,5 +1,7 @@
 # TCG Manager
 
+[![GitHub license](https://img.shields.io/github/license/Danikileitor/TCG-Manager.png)](https://github.com/Danikileitor/TCG-Manager/blob/main/LICENSE)
+
 Gestor de colección de cartas TCG y constructor de mazos. TCG incluidos: **Magic: The Gathering**, **Yu-Gi-Oh!** y **Digimon Card Game**.
 
 - Frontend: HTML + CSS + JS (módulos ES), sin frameworks.
@@ -26,6 +28,7 @@ tcg-manager/
 └── netlify/functions/           # backend serverless
     ├── _lib/ db.js · auth.js · http.js · games.js
     ├── auth-register.js · auth-login.js · auth-logout.js · auth-me.js
+    ├── auth-google.js · auth-config.js
     ├── games.js · collection.js · decks.js
 ```
 
@@ -43,7 +46,7 @@ Las colecciones (`users`, `usercards`, `decks`, `games`) y sus índices se crean
 ```bash
 npm install
 cp .env.example .env      # y rellena MONGODB_URI y JWT_SECRET
-npx netlify dev           # http://localhost:8888
+npx netlify-cli dev       # http://localhost:8888
 ```
 
 Para generar un `JWT_SECRET` aleatorio:
@@ -56,11 +59,36 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 1. Sube el proyecto a GitHub (el `.gitignore` ya excluye `.env`; comprueba que no se sube).
 2. En Netlify: **Add new site → Import from Git** y elige el repositorio. `netlify.toml` ya indica la carpeta pública y la de funciones.
-3. **Site configuration → Environment variables** y añade, marcándolas como *secret*:
-   - `MONGODB_URI`
-   - `JWT_SECRET`
-   - `MONGODB_DB` (opcional, por defecto `tcgmanager`)
+3. **Site configuration → Environment variables** y añade estas variables. Marca como _secret_ solo `MONGODB_URI` y `JWT_SECRET`:
+   - `MONGODB_URI` (_secret_)
+   - `JWT_SECRET` (_secret_)
+   - `GOOGLE_CLIENT_ID` (opcional, ver sección 4; **sin** marcar como secret)
+   - `MONGODB_DB` (opcional, por defecto `tcgmanager`; **sin** marcar como secret).
 4. Haz un nuevo deploy para que las funciones lean las variables.
+
+## 4. Iniciar sesión con Google (opcional)
+
+El botón "Continuar con Google" solo aparece si existe la variable `GOOGLE_CLIENT_ID`. Sin ella, el login con usuario y contraseña funciona igual.
+
+1. En [Google Cloud Console](https://console.cloud.google.com/) crea (o elige) un proyecto.
+2. Configura la **pantalla de consentimiento de OAuth** (Google Auth Platform): tipo _Externo_, nombre de la app y tu email. Para que pueda entrar cualquier persona, publica la app en producción (mientras esté en "Pruebas" solo entran los usuarios de prueba que añadas). Con los permisos básicos (email y perfil) no se requiere verificación de Google.
+3. Crea un **ID de cliente OAuth** de tipo **Aplicación web** (sección Credenciales / Clientes).
+4. En **Orígenes de JavaScript autorizados** añade, sin barra final:
+   - `https://TU-SITIO.netlify.app` (y tu dominio propio si lo usas)
+   - `http://localhost:8888` (para `netlify-cli dev`)
+
+   No hace falta rellenar "URI de redireccionamiento": este flujo usa un botón con ventana emergente.
+
+5. Copia el **ID de cliente** (termina en `.apps.googleusercontent.com`). No necesitas el "client secret".
+6. En Netlify añade la variable `GOOGLE_CLIENT_ID` con ese valor. **No la marques como secret** (es público y se envía al navegador) y lanza un nuevo deploy.
+
+Cómo funciona: el navegador recibe de Google un token firmado y lo envía a `/api/auth/google`; el servidor lo verifica (firma, caducidad, emisor y audiencia) y exige que el email esté verificado por Google. Después crea la cuenta o inicia sesión y emite la misma cookie de sesión que el login normal.
+
+Reglas de cuentas:
+
+- Primera vez con Google: se crea una cuenta nueva sin contraseña, con un nombre de usuario derivado de tu nombre.
+- Si ya existe una cuenta **con contraseña** que usa el mismo email, no se vincula automáticamente (el registro con contraseña no verifica el email y vincular permitiría el robo de cuentas); se pide iniciar sesión con la contraseña. Una futura pantalla de ajustes podría ofrecer vincular Google desde una sesión ya iniciada.
+- Las cuentas creadas con Google no pueden entrar con contraseña.
 
 ## Seguridad implementada
 
@@ -77,11 +105,11 @@ Pendiente recomendado antes de producción: limitar intentos de login (rate limi
 
 El catálogo **no se guarda** en tu base de datos; se consulta desde el navegador a APIs públicas (`public/js/card-providers.js`):
 
-| TCG | API |
-|-----|-----|
-| MTG | Scryfall |
-| Yu-Gi-Oh! | YGOPRODeck |
-| Digimon | digimoncard.io |
+| TCG       | API            |
+| --------- | -------------- |
+| MTG       | Scryfall       |
+| Yu-Gi-Oh! | YGOPRODeck     |
+| Digimon   | digimoncard.io |
 
 Tú solo guardas lo que posee cada usuario (`usercards`) y sus mazos (`decks`), referenciando cada carta por su `cardId`. Si una API cambia sus campos o sus condiciones de acceso, solo hay que tocar `card-providers.js`. Si más adelante quieres cachear el catálogo en Atlas, bastaría con añadir una función `cards.js` y una colección `cards`.
 

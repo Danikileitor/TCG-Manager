@@ -40,8 +40,15 @@
       <p id="form-error" class="form-error" role="alert"></p>
       <button id="submit-btn" class="btn" type="submit">Entrar</button>
     </form>
+
+    <!-- Se muestra solo si el servidor tiene GOOGLE_CLIENT_ID configurado -->
+    <div id="google-section" class="google-section hidden">
+      <div class="divider"><span>o continúa con</span></div>
+      <div id="google-btn" class="google-btn"></div>
+    </div>
   </main>
 
+  <script src="https://accounts.google.com/gsi/client" async defer id="gsi-script"></script>
   <script type="module" src="js/auth.js"></script>
 </body>
 </html>

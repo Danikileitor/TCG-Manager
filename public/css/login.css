@@ -68,3 +68,31 @@
 .login-card .btn {
   width: 100%;
 }
+
+/* ----- Inicio de sesión con Google ----- */
+.google-section {
+  margin-top: 1.4rem;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.google-btn {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}

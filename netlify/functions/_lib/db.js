@@ -31,6 +31,11 @@ async function getDb() {
 async function ensureIndexes(db) {
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
   await db.collection('users').createIndex({ username: 1 }, { unique: true });
+  // Único solo cuando googleId existe (las cuentas con contraseña no lo tienen)
+  await db.collection('users').createIndex(
+    { googleId: 1 },
+    { unique: true, partialFilterExpression: { googleId: { $type: 'string' } } }
+  );
 
   await db.collection('usercards').createIndex(
     { userId: 1, game: 1, cardId: 1, language: 1, finish: 1, condition: 1 },
