@@ -1,0 +1,17 @@
+{
+  "name": "tcg-manager",
+  "version": "1.0.0",
+  "description": "Gestor de colección de cartas TCG y constructor de mazos (MTG, Yu-Gi-Oh!, Digimon)",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.10.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}

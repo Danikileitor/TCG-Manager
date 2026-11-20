@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi colección · TCG Manager</title>
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page-main">
+    <div class="page-title">
+      <h1><span id="game-name">…</span> · Mi colección</h1>
+      <nav class="subnav">
+        <a href="home.html">← Todos los TCG</a>
+        <a id="nav-collection" class="active" href="#">Colección</a>
+        <a id="nav-decks" href="#">Mazos</a>
+      </nav>
+    </div>
+
+    <div class="layout-two">
+      <section class="panel">
+        <h2>Mis cartas</h2>
+        <div id="stats" class="stats"></div>
+        <div class="toolbar">
+          <input id="filter-input" type="search" placeholder="Filtrar mi colección por nombre…">
+        </div>
+        <div id="collection-grid" class="card-grid"><div class="spinner"></div></div>
+      </section>
+
+      <aside class="panel">
+        <h2>Añadir desde el catálogo</h2>
+        <form id="catalog-form" class="toolbar">
+          <input id="catalog-input" type="search" placeholder="Nombre de la carta…">
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+        <div id="result-list" class="result-list">
+          <div class="empty">Busca una carta para añadirla a tu colección.</div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="js/collection.js"></script>
+</body>
+</html>

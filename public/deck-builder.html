@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis mazos · TCG Manager</title>
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page-main">
+    <div class="page-title">
+      <h1><span id="game-name">…</span> · Mis mazos</h1>
+      <nav class="subnav">
+        <a href="home.html">← Todos los TCG</a>
+        <a id="nav-collection" href="#">Colección</a>
+        <a id="nav-decks" class="active" href="#">Mazos</a>
+      </nav>
+    </div>
+
+    <div class="layout-two">
+      <section class="panel">
+        <div class="deck-picker">
+          <select id="deck-select" aria-label="Mazo"></select>
+          <button id="new-deck-btn" class="btn" type="button">+ Nuevo mazo</button>
+        </div>
+
+        <div id="empty-state" class="empty">Selecciona un mazo o crea uno nuevo para empezar.</div>
+
+        <div id="editor" class="hidden">
+          <div class="deck-meta">
+            <div class="field">
+              <label for="deck-name">Nombre del mazo</label>
+              <input id="deck-name" type="text" maxlength="100">
+            </div>
+            <div class="field">
+              <label for="deck-format">Formato</label>
+              <select id="deck-format"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="deck-description">Descripción</label>
+            <textarea id="deck-description" rows="2" maxlength="1000"></textarea>
+          </div>
+
+          <div id="zones"></div>
+          <div id="hints"></div>
+
+          <div class="toolbar" style="margin-top:1rem">
+            <button id="save-btn" class="btn" type="button">Guardar mazo</button>
+            <button id="delete-btn" class="btn btn-danger hidden" type="button">Eliminar mazo</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2>Añadir cartas</h2>
+        <div class="source-switch">
+          <button id="src-collection" class="active" type="button">Mi colección</button>
+          <button id="src-catalog" type="button">Catálogo</button>
+        </div>
+        <form id="search-form" class="toolbar">
+          <input id="search-input" type="search" placeholder="Filtrar mi colección…">
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+        <div class="toolbar">
+          <select id="target-zone" aria-label="Zona de destino"></select>
+        </div>
+        <div id="result-list" class="result-list"></div>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="js/deck-builder.js"></script>
+</body>
+</html>
