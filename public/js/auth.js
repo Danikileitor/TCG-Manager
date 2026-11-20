@@ -52,16 +52,74 @@ form.addEventListener('submit', async (e) => {
 const googleSection = document.getElementById('google-section');
 const googleBtn = document.getElementById('google-btn');
 
+// Paso extra para cuentas nuevas de Google: elegir nombre de usuario
+const mainView = document.getElementById('main-view');
+const usernameForm = document.getElementById('username-form');
+const usernameInput = document.getElementById('google-username');
+const usernameError = document.getElementById('username-error');
+const usernameSubmit = document.getElementById('username-submit');
+
+// El ID token de Google se guarda solo en memoria mientras se elige el nombre
+let pendingCredential = null;
+
+function showUsernameStep({ email, suggestedUsername }) {
+  document.getElementById('google-email').textContent = email;
+  usernameInput.value = suggestedUsername || '';
+  usernameError.textContent = '';
+  mainView.classList.add('hidden');
+  usernameForm.classList.remove('hidden');
+  usernameInput.focus();
+  usernameInput.select();
+}
+
+function backToMainView() {
+  pendingCredential = null;
+  usernameForm.classList.add('hidden');
+  mainView.classList.remove('hidden');
+}
+
 async function handleGoogleCredential(response) {
   errorBox.textContent = '';
   try {
     // "credential" es un ID token firmado por Google; el servidor lo verifica
-    await api.post('/auth/google', { credential: response.credential });
+    const result = await api.post('/auth/google', { credential: response.credential });
+    if (result.needsUsername) {
+      pendingCredential = response.credential;
+      showUsernameStep(result);
+      return;
+    }
     window.location.href = 'home.html';
   } catch (err) {
     errorBox.textContent = err.message;
   }
 }
+
+usernameForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  usernameError.textContent = '';
+  const username = usernameInput.value.trim();
+
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    usernameError.textContent = 'El usuario debe tener 3-20 caracteres (letras, números o _)';
+    return;
+  }
+
+  usernameSubmit.disabled = true;
+  try {
+    await api.post('/auth/google', { credential: pendingCredential, username });
+    window.location.href = 'home.html';
+  } catch (err) {
+    usernameError.textContent = err.message;
+    usernameSubmit.disabled = false;
+    // Si el token de Google caducó o hay un conflicto con el email, volvemos al inicio
+    if (err.status === 401 || (err.status === 409 && /email/i.test(err.message))) {
+      errorBox.textContent = err.message;
+      backToMainView();
+    }
+  }
+});
+
+document.getElementById('username-cancel').addEventListener('click', backToMainView);
 
 function renderGoogleButton(clientId) {
   window.google.accounts.id.initialize({

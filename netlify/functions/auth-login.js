@@ -22,9 +22,14 @@ exports.handler = async (event) => {
 
   try {
     const db = await getDb();
-    const user = await db.collection('users').findOne({
-      $or: [{ email: identifier }, { username: new RegExp(`^${escapeRegex(identifier)}$`, 'i') }],
-    });
+    // Los nombres de usuario no pueden contener "@", así que distinguimos email/usuario.
+    // El usuario se busca sin distinguir mayúsculas (mismo criterio que el índice único).
+    const user = identifier.includes('@')
+      ? await db.collection('users').findOne({ email: identifier })
+      : await db.collection('users').findOne(
+          { username: identifier },
+          { collation: { locale: 'en', strength: 2 } }
+        );
 
     // Las cuentas creadas con Google no tienen contraseña (passwordHash null)
     const hash = user && user.passwordHash ? user.passwordHash : DUMMY_HASH;
@@ -44,7 +49,3 @@ exports.handler = async (event) => {
     return serverError(err);
   }
 };
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

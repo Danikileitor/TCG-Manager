@@ -31,6 +31,17 @@ async function getDb() {
 async function ensureIndexes(db) {
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
   await db.collection('users').createIndex({ username: 1 }, { unique: true });
+  // Nombre de usuario único SIN distinguir mayúsculas ("Ana" y "ana" son el mismo).
+  // Es un índice adicional con nombre propio; si ya hubiera nombres duplicados por
+  // mayúsculas no se puede crear, así que solo avisamos en el log y seguimos.
+  try {
+    await db.collection('users').createIndex(
+      { username: 1 },
+      { unique: true, name: 'username_ci_unique', collation: { locale: 'en', strength: 2 } }
+    );
+  } catch (err) {
+    console.warn('No se pudo crear el índice único de username sin distinguir mayúsculas:', err.message);
+  }
   // Único solo cuando googleId existe (las cuentas con contraseña no lo tienen)
   await db.collection('users').createIndex(
     { googleId: 1 },

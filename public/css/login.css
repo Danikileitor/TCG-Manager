@@ -69,6 +69,39 @@
   width: 100%;
 }
 
+/* ----- Paso "elige tu nombre de usuario" (alta con Google) ----- */
+.step-title {
+  font-size: 1.2rem;
+  margin: 0 0 0.4rem;
+}
+
+.step-text {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin: 0 0 1.2rem;
+}
+
+.step-text strong {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.step-cancel {
+  margin-top: 0.6rem;
+}
+
+.legal-note {
+  margin: 1.4rem 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.legal-note a {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
 /* ----- Inicio de sesión con Google ----- */
 .google-section {
   margin-top: 1.4rem;

@@ -21,7 +21,9 @@ tcg-manager/
 │   ├── home.html                # selección de TCG
 │   ├── collection.html          # colección del usuario
 │   ├── deck-builder.html        # constructor de mazos
-│   ├── css/  base.css · login.css · home.css · app.css
+│   ├── privacy.html             # política de privacidad
+│   ├── terms.html               # condiciones del servicio
+│   ├── css/  base.css · login.css · home.css · app.css · legal.css
 │   ├── js/   api.js · ui.js · session.js · auth.js · home.js
 │   │         collection.js · deck-builder.js · card-providers.js
 │   └── assets/img/logo.svg
@@ -86,9 +88,20 @@ Cómo funciona: el navegador recibe de Google un token firmado y lo envía a `/a
 
 Reglas de cuentas:
 
-- Primera vez con Google: se crea una cuenta nueva sin contraseña, con un nombre de usuario derivado de tu nombre.
+- Primera vez con Google: la web te pide **elegir un nombre de usuario** (con una sugerencia a partir de tu nombre) antes de crear la cuenta, que queda sin contraseña. Hasta que lo eliges no se guarda nada en la base de datos. El nombre es único **sin distinguir mayúsculas** ("Ana" y "ana" cuentan como el mismo).
 - Si ya existe una cuenta **con contraseña** que usa el mismo email, no se vincula automáticamente (el registro con contraseña no verifica el email y vincular permitiría el robo de cuentas); se pide iniciar sesión con la contraseña. Una futura pantalla de ajustes podría ofrecer vincular Google desde una sesión ya iniciada.
 - Las cuentas creadas con Google no pueden entrar con contraseña.
+
+## 5. Páginas legales
+
+`public/privacy.html` (política de privacidad) y `public/terms.html` (condiciones del servicio) están enlazadas desde el login y desde el pie de la home. Google exige que la página de inicio enlace a la política de privacidad para la verificación de marca.
+
+**Antes de publicar**, sustituye en ambas páginas los datos marcados en amarillo:
+
+- `[TU NOMBRE O RAZÓN SOCIAL]`
+- `[TU EMAIL DE CONTACTO]`
+
+Y revisa que el texto refleja lo que realmente haces con los datos (si añades analítica, otros proveedores o una función de borrado de cuenta, actualízalas y cambia la fecha). Son textos de partida, no asesoramiento jurídico.
 
 ## Seguridad implementada
 

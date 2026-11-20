@@ -1,0 +1,66 @@
+/* ===== Páginas legales (privacidad y condiciones) ===== */
+.legal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem clamp(1rem, 4vw, 2.5rem);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.legal {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 1.5rem) 3rem;
+}
+
+.legal h1 {
+  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  margin-bottom: 0.3rem;
+}
+
+.legal .updated {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 2rem;
+}
+
+.legal h2 {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.legal p,
+.legal li {
+  color: #c9d1e2;
+}
+
+.legal ul {
+  padding-left: 1.3rem;
+}
+
+.legal li {
+  margin-bottom: 0.35rem;
+}
+
+/* Datos que debe rellenar el titular del sitio antes de publicar */
+.placeholder {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.legal-nav {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
