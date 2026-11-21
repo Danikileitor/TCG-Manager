@@ -2,7 +2,13 @@
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
+import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, debounce } from './ui.js';
+
+// Etiqueta con el idioma de una carta (ES, EN, FR...)
+function langBadge(code) {
+  return code ? el('span', { class: 'lang-badge', text: langShort(code) }) : null;
+}
 
 const ZONE_LABELS = {
   main: 'Mazo principal',
@@ -45,6 +51,7 @@ let decks = [];
 let deck = null; // { _id?, name, format, description, cards: [] }
 let dirty = false;
 let source = 'collection'; // 'collection' | 'catalog'
+let catalogLang = 'en'; // idioma elegido para buscar en el catálogo
 
 const els = {
   picker: document.getElementById('deck-select'),
@@ -64,6 +71,9 @@ const els = {
   resultList: document.getElementById('result-list'),
   srcCollection: document.getElementById('src-collection'),
   srcCatalog: document.getElementById('src-catalog'),
+  langField: document.getElementById('lang-field'),
+  langSelect: document.getElementById('lang-select'),
+  langNote: document.getElementById('lang-note'),
 };
 
 function markDirty() {
@@ -142,7 +152,7 @@ function renderZones() {
           el(
             'div',
             { class: 'deck-row' },
-            el('span', { text: card.name }),
+            el('span', {}, card.name, langBadge(card.language)),
             el(
               'span',
               { class: 'qty' },
@@ -193,6 +203,7 @@ function addCardToDeck(card, zoneOverride) {
       cardId: card.cardId,
       name: card.name,
       imageUrl: card.imageUrl || '',
+      language: card.language || catalogLang,
       quantity: 1,
       zone,
     });
@@ -262,6 +273,8 @@ function setSource(newSource) {
   els.srcCollection.classList.toggle('active', source === 'collection');
   els.srcCatalog.classList.toggle('active', source === 'catalog');
   els.searchInput.placeholder = source === 'collection' ? 'Filtrar mi colección…' : 'Buscar en el catálogo…';
+  // El idioma solo se elige al buscar en el catálogo; las cartas de la colección ya tienen el suyo
+  els.langField.classList.toggle('hidden', source !== 'catalog');
   runSearch();
 }
 
@@ -285,7 +298,8 @@ function renderResults(results) {
         el(
           'div',
           {},
-          el('div', { class: 'name', text: r.name }),
+          el('div', { class: 'name' }, r.name, langBadge(r.language)),
+          r.altName ? el('div', { class: 'meta', text: `EN: ${r.altName}` }) : null,
           el('div', { class: 'meta', text: [r.typeLine, r.setCode, r.rarity].filter(Boolean).join(' · ') })
         ),
         el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(r, els.targetZone.value) })
@@ -311,7 +325,7 @@ async function runSearch() {
         els.resultList.append(el('div', { class: 'empty', text: 'Escribe al menos 2 caracteres y pulsa Buscar.' }));
         return;
       }
-      renderResults(await searchCatalog(game.key, q));
+      renderResults(await searchCatalog(game.key, q, catalogLang));
     }
   } catch (err) {
     clear(els.resultList);
@@ -365,6 +379,17 @@ async function init() {
   game.formats.forEach((f) => els.format.append(el('option', { value: f, text: f })));
   els.targetZone.append(el('option', { value: 'auto', text: 'Zona: automática' }));
   game.deckZones.forEach((z) => els.targetZone.append(el('option', { value: z, text: ZONE_LABELS[z] || z })));
+
+  // Idioma de las cartas del catálogo
+  catalogLang = setupLanguageSelect({
+    select: els.langSelect,
+    noteEl: els.langNote,
+    gameKey: game.key,
+    onChange: (code) => {
+      catalogLang = code;
+      if (source === 'catalog' && els.searchInput.value.trim().length >= 2) runSearch();
+    },
+  });
 
   try {
     await loadDecks('');

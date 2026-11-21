@@ -25,10 +25,13 @@ tcg-manager/
 │   ├── terms.html               # condiciones del servicio
 │   ├── css/  base.css · login.css · home.css · app.css · legal.css
 │   ├── js/   api.js · ui.js · session.js · auth.js · home.js
-│   │         collection.js · deck-builder.js · card-providers.js · games-cache.js
+│   │         collection.js · deck-builder.js · card-providers.js · games-cache.js · language.js
+│   ├── data/ygo/                # índices de búsqueda de Yu-Gi-Oh! (uno por idioma, generados)
 │   ├── site.webmanifest         # manifest de la web app (instalable)
 │   └── favicon.ico · favicon-96x96.png · apple-touch-icon.png
 │       web-app-manifest-192x192.png · web-app-manifest-512x512.png
+├── scripts/
+│   └── build-ygo-index.mjs      # genera public/data/ygo a partir de YGOJSON
 └── netlify/functions/           # backend serverless
     ├── _lib/ db.js · auth.js · http.js · games.js
     ├── auth-register.js · auth-login.js · auth-logout.js · auth-me.js
@@ -116,6 +119,29 @@ Las páginas se enlazan sin extensión (`/home`, `/collection?game=mtg`, `/deck-
 - **Iconos:** se sirven con caché de 1 día.
 - La primera petición tras un rato sin tráfico puede ser más lenta (arranque en frío de la función de Netlify y conexión a Atlas); no se puede evitar en el plan gratuito.
 
+## 8. Idiomas de las cartas
+
+En la colección y en el constructor de mazos hay un selector de **idioma de las cartas** que usa los **nombres oficiales** de cada catálogo (nada se traduce). Cada carta guarda el idioma con el que se añadió, y la colección se puede filtrar por idioma. Una carta en español y la misma en inglés son entradas distintas, porque son copias físicas distintas.
+
+| TCG | Idiomas | Notas |
+| --- | ------- | ----- |
+| MTG (Scryfall) | es, en, fr, de, it, pt, ja, ko, ru, zhs, zht | Nombre, tipo e imagen de la impresión en ese idioma. Solo aparecen las cartas impresas en él. |
+| Yu-Gi-Oh! (YGOJSON) | es, en, fr, de, it, pt, ja, ko, zhs, zht | Solo aparecen las cartas con nombre oficial en ese idioma (en chino tradicional hay muy pocas). Las imágenes son las de la versión en inglés. |
+| Digimon (digimoncard.io) | en | La fuente solo devuelve nombres en inglés. |
+
+Los idiomas de cada TCG se declaran en `public/js/card-providers.js` (`languages` de cada proveedor): para añadir idiomas basta con cambiar de fuente o ampliar esa lista. La lista de códigos válidos del servidor está en `netlify/functions/_lib/games.js` (`VALID_LANGUAGES`).
+
+### Yu-Gi-Oh!: índice de YGOJSON
+
+[YGOJSON](https://github.com/iconmaster5326/YGOJSON) no es una API de búsqueda, sino miles de cartas en archivos JSON (el agregado pesa ~110 MB). Por eso el script `scripts/build-ygo-index.mjs` genera un índice mínimo por idioma en `public/data/ygo/` (id, nombre oficial, nombre en inglés, tipo e imagen). El navegador descarga solo el del idioma elegido, la primera vez que se busca (~1 MB sin comprimir, ~0,3 MB comprimido; Netlify lo comprime y `netlify.toml` lo cachea), y busca en local sin más peticiones.
+
+- **Los índices ya están generados** y van en el repositorio: no hace falta ejecutar nada para desplegar.
+- **Para actualizarlos** (Node 18 o superior, sin dependencias): `node scripts/build-ygo-index.mjs` y sube los cambios de `public/data/ygo`. El script descarga unos 35 MB de GitHub.
+- El `cardId` de cada carta es su passcode, el mismo que usaba YGOPRODeck, así que las cartas y mazos ya guardados siguen valiendo.
+- Se excluyen fichas (tokens) y cartas Skill. YGOJSON no incluye Rush Duel.
+- La fecha de los datos aparece en `public/data/ygo/meta.json` (`sourceLastYGOProDeckRead` y `sourceLastYugipediaRead`): son las últimas lecturas del propio YGOJSON, y las cartas posteriores a esa fecha no estarán hasta que YGOJSON se actualice.
+- Las cartas ya no muestran código de set ni rareza, porque el índice no incluye los sets.
+
 ## Seguridad implementada
 
 - Contraseñas con **bcrypt** (coste 12); nunca en texto plano.
@@ -129,13 +155,13 @@ Pendiente recomendado antes de producción: limitar intentos de login (rate limi
 
 ## Catálogo de cartas
 
-El catálogo **no se guarda** en tu base de datos; se consulta desde el navegador a APIs públicas (`public/js/card-providers.js`):
+El catálogo **no se guarda** en tu base de datos; se consulta desde el navegador (`public/js/card-providers.js`):
 
-| TCG       | API            |
-| --------- | -------------- |
-| MTG       | Scryfall       |
-| Yu-Gi-Oh! | YGOPRODeck     |
-| Digimon   | digimoncard.io |
+| TCG       | Fuente                                          |
+| --------- | ----------------------------------------------- |
+| MTG       | API de Scryfall                                 |
+| Yu-Gi-Oh! | Índice propio generado desde YGOJSON (ver arriba) |
+| Digimon   | API de digimoncard.io                           |
 
 Tú solo guardas lo que posee cada usuario (`usercards`) y sus mazos (`decks`), referenciando cada carta por su `cardId`. Si una API cambia sus campos o sus condiciones de acceso, solo hay que tocar `card-providers.js`. Si más adelante quieres cachear el catálogo en Atlas, bastaría con añadir una función `cards.js` y una colección `cards`.
 

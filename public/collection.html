@@ -20,7 +20,6 @@
     <div class="page-title">
       <h1><span id="game-name">…</span> · Mi colección</h1>
       <nav class="subnav">
-        <a href="/home">← Todos los TCG</a>
         <a id="nav-collection" class="active" href="#">Colección</a>
         <a id="nav-decks" href="#">Mazos</a>
       </nav>
@@ -32,12 +31,20 @@
         <div id="stats" class="stats"></div>
         <div class="toolbar">
           <input id="filter-input" type="search" placeholder="Filtrar mi colección por nombre…">
+          <select id="filter-lang" aria-label="Filtrar por idioma">
+            <option value="">Todos los idiomas</option>
+          </select>
         </div>
         <div id="collection-grid" class="card-grid"><div class="spinner"></div></div>
       </section>
 
       <aside class="panel">
         <h2>Añadir desde el catálogo</h2>
+        <div class="field lang-field">
+          <label for="lang-select">Idioma de las cartas</label>
+          <select id="lang-select"></select>
+          <small id="lang-note" class="muted"></small>
+        </div>
         <form id="catalog-form" class="toolbar">
           <input id="catalog-input" type="search" placeholder="Nombre de la carta…">
           <button class="btn" type="submit">Buscar</button>

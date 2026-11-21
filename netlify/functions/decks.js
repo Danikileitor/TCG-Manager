@@ -1,7 +1,7 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./_lib/db');
 const { getUserFromRequest } = require('./_lib/auth');
-const { DEFAULT_GAMES, VALID_GAME_KEYS } = require('./_lib/games');
+const { DEFAULT_GAMES, VALID_GAME_KEYS, VALID_LANGUAGES } = require('./_lib/games');
 const { json, parseBody, requireJson, serverError } = require('./_lib/http');
 
 function str(value, max = 200) {
@@ -18,6 +18,7 @@ function sanitizeCards(cards, game) {
     cardId: str(c.cardId, 100),
     name: str(c.name, 200),
     imageUrl: str(c.imageUrl, 500),
+    language: VALID_LANGUAGES.includes(c.language) ? c.language : 'en',
     quantity: Math.max(1, Math.min(99, parseInt(c.quantity, 10) || 1)),
     zone: zones.includes(c.zone) ? c.zone : 'main',
   })).filter((c) => c.cardId && c.name);

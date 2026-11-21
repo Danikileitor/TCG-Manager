@@ -38,6 +38,9 @@ const DEFAULT_GAMES = [
 
 const VALID_GAME_KEYS = DEFAULT_GAMES.map((g) => g.key);
 
+// Códigos de idioma que acepta la API para las cartas (los de Scryfall; YGO y Digimon usan un subconjunto)
+const VALID_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
+
 // Caché en memoria de la instancia de la función: mientras la función siga "caliente"
 // no se consulta MongoDB en cada visita a la home (la lista casi nunca cambia).
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -59,4 +62,4 @@ async function getGames(db) {
   return games;
 }
 
-module.exports = { DEFAULT_GAMES, VALID_GAME_KEYS, getGames };
+module.exports = { DEFAULT_GAMES, VALID_GAME_KEYS, VALID_LANGUAGES, getGames };

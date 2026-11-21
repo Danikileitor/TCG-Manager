@@ -20,7 +20,6 @@
     <div class="page-title">
       <h1><span id="game-name">…</span> · Mis mazos</h1>
       <nav class="subnav">
-        <a href="/home">← Todos los TCG</a>
         <a id="nav-collection" href="#">Colección</a>
         <a id="nav-decks" class="active" href="#">Mazos</a>
       </nav>
@@ -66,6 +65,11 @@
         <div class="source-switch">
           <button id="src-collection" class="active" type="button">Mi colección</button>
           <button id="src-catalog" type="button">Catálogo</button>
+        </div>
+        <div id="lang-field" class="field lang-field hidden">
+          <label for="lang-select">Idioma de las cartas</label>
+          <select id="lang-select"></select>
+          <small id="lang-note" class="muted"></small>
         </div>
         <form id="search-form" class="toolbar">
           <input id="search-input" type="search" placeholder="Filtrar mi colección…">

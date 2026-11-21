@@ -89,6 +89,33 @@
   width: auto;
 }
 
+/* ----- Selector de idioma de las cartas ----- */
+.lang-field {
+  margin-bottom: 0.8rem;
+}
+
+.lang-field select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.lang-field small {
+  line-height: 1.35;
+}
+
+.lang-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
 /* ----- Rejilla de cartas ----- */
 .card-grid {
   display: grid;

@@ -1,7 +1,7 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./_lib/db');
 const { getUserFromRequest } = require('./_lib/auth');
-const { VALID_GAME_KEYS } = require('./_lib/games');
+const { VALID_GAME_KEYS, VALID_LANGUAGES } = require('./_lib/games');
 const { json, parseBody, requireJson, serverError } = require('./_lib/http');
 
 const FINISHES = ['normal', 'foil', 'etched', '1st', 'unlimited', 'limited'];
@@ -54,7 +54,8 @@ exports.handler = async (event) => {
       if (!VALID_GAME_KEYS.includes(game)) return json(400, { error: 'TCG no válido' });
       if (!cardId || !name) return json(400, { error: 'cardId y name son obligatorios' });
 
-      const language = str(body.language || 'es', 10).toLowerCase();
+      // Idioma de ESTA copia de la carta (una carta en español y otra en inglés son entradas distintas)
+      const language = VALID_LANGUAGES.includes(body.language) ? body.language : 'en';
       const finish = FINISHES.includes(body.finish) ? body.finish : 'normal';
       const condition = CONDITIONS.includes(body.condition) ? body.condition : 'NM';
 
