@@ -37,6 +37,7 @@ tcg-manager/
     ├── auth-register.js · auth-login.js · auth-logout.js · auth-me.js
     ├── auth-google.js · auth-config.js
     ├── games.js · collection.js · decks.js
+    ├── digimon-search.js        # proxy de la búsqueda de Digimon (evita CORS)
 ```
 
 ## 1. Preparar MongoDB Atlas
@@ -161,7 +162,7 @@ El catálogo **no se guarda** en tu base de datos; se consulta desde el navegado
 | --------- | ----------------------------------------------- |
 | MTG       | API de Scryfall                                 |
 | Yu-Gi-Oh! | Índice propio generado desde YGOJSON (ver arriba) |
-| Digimon   | API de digimoncard.io                           |
+| Digimon   | API de digimoncard.io, a través de la función `digimon-search` (la API no admite llamadas directas desde el navegador) |
 
 Tú solo guardas lo que posee cada usuario (`usercards`) y sus mazos (`decks`), referenciando cada carta por su `cardId`. Si una API cambia sus campos o sus condiciones de acceso, solo hay que tocar `card-providers.js`. Si más adelante quieres cachear el catálogo en Atlas, bastaría con añadir una función `cards.js` y una colección `cards`.
 

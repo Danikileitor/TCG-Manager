@@ -11,8 +11,15 @@
 // usuario y sus mazos (referenciando cardId). Si alguna API cambia, solo hay que
 // tocar este archivo.
 
+import { api } from './api.js';
+
 async function getJson(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  let res;
+  try {
+    res = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch (err) {
+    throw new Error('No se pudo conectar con el catálogo. Revisa tu conexión e inténtalo de nuevo');
+  }
   if (res.status === 404) return null; // Scryfall responde 404 si no hay resultados
   if (!res.ok) throw new Error('El catálogo no está disponible ahora mismo');
   return res.json();
@@ -46,7 +53,7 @@ function mtgPrintedName(c) {
 
 const scryfall = {
   languages: MTG_LANGUAGES,
-  note: 'Solo aparecen las cartas que se han impreso en este idioma, con su nombre e imagen oficiales.',
+  note: '',
   async search(query, lang) {
     // lang:xx limita la búsqueda a impresiones en ese idioma (nombre, texto e imagen oficiales)
     const q = `${query} lang:${lang}`;
@@ -137,7 +144,7 @@ function ygoImage(row) {
 
 const ygojson = {
   languages: YGO_LANGUAGES,
-  note: 'Solo aparecen las cartas con nombre oficial en este idioma. Las imágenes son las de la versión en inglés.',
+  note: '',
   async search(query, lang) {
     const whole = normalizeText(query);
     if (!whole) return [];
@@ -173,18 +180,15 @@ const ygojson = {
 // ---------- Digimon Card Game (digimoncard.io) ----------
 // Esta fuente solo devuelve nombres en inglés. Para añadir más idiomas habría que
 // incorporar otra fuente de datos y declarar aquí sus idiomas.
-// Nota: comprueba la documentación de la API (https://digimoncard.io/index.php/api-documentation)
-// por si cambian los nombres de los campos o las condiciones de CORS.
+// La consulta pasa por /api/digimon-search (netlify/functions/digimon-search.js) porque
+// digimoncard.io no permite llamadas directas desde el navegador (CORS).
 const digimon = {
   languages: [{ code: 'en', label: 'English' }],
-  note: 'La fuente de datos de Digimon solo ofrece nombres en inglés por ahora.',
+  note: '',
   async search(query) {
-    const url =
-      'https://digimoncard.io/api-public/search.php?series=Digimon%20Card%20Game&sort=name&sortdirection=asc' +
-      `&n=${encodeURIComponent(query)}`;
-    const data = await getJson(url);
-    if (!Array.isArray(data)) return [];
-    return data.slice(0, 40).map((c) => {
+    const data = await api.get(`/digimon-search?n=${encodeURIComponent(query)}`);
+    const list = (data && data.cards) || [];
+    return list.map((c) => {
       const id = c.id || c.cardnumber || c.card_number || c.name;
       const type = c.type || c.card_type || '';
       return {
