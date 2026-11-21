@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
 import { setupLanguageSelect, langShort } from './language.js';
-import { el, clear, toast, cardThumb, debounce } from './ui.js';
+import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
 
 const collectionGrid = document.getElementById('collection-grid');
 const resultList = document.getElementById('result-list');
@@ -86,7 +86,7 @@ function renderCollection() {
             el('span', { text: `x${card.quantity}` }),
             el('button', { type: 'button', text: '+', 'aria-label': 'Añadir una copia', onClick: () => changeQty(card, 1) })
           ),
-          el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Quitar', onClick: () => removeCard(card) })
+          el('button', { class: 'btn btn-danger btn-sm btn-icon', type: 'button', title: 'Quitar de la colección', 'aria-label': 'Quitar de la colección', onClick: () => removeCard(card) }, trashIcon())
         )
       )
     );

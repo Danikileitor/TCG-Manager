@@ -71,41 +71,100 @@ const scryfall = {
   },
 };
 
-// ---------- Yu-Gi-Oh! (YGOPRODeck) ----------
-// La API admite el parámetro "language": fr, de, it, pt (el inglés es el valor por defecto).
-// No ofrece español. Las imágenes solo existen en inglés.
+// ---------- Yu-Gi-Oh! (YGOJSON) ----------
+// Datos de https://github.com/iconmaster5326/YGOJSON con los nombres oficiales de cada
+// idioma. YGOJSON no es una API de búsqueda, así que se usa un índice generado con
+// scripts/build-ygo-index.mjs (archivos public/data/ygo/<idioma>.json, uno por idioma).
+// El navegador descarga solo el del idioma elegido (la primera vez que se busca) y busca
+// en local, sin más peticiones. Las imágenes son las de la versión en inglés.
 const YGO_LANGUAGES = [
+  { code: 'es', label: 'Español' },
   { code: 'en', label: 'English' },
   { code: 'fr', label: 'Français' },
   { code: 'de', label: 'Deutsch' },
   { code: 'it', label: 'Italiano' },
   { code: 'pt', label: 'Português' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+  { code: 'zhs', label: '简体中文' },
+  { code: 'zht', label: '繁體中文' },
 ];
 
-const EXTRA_DECK_TYPES = ['Fusion', 'Synchro', 'XYZ', 'Link'];
+// Tipo de carta del índice -> etiqueta de la interfaz y zona del mazo
+const YGO_KINDS = {
+  m: { label: 'Monstruo', zone: 'main' },
+  x: { label: 'Monstruo de Extra Deck', zone: 'extra' },
+  s: { label: 'Carta de Magia', zone: 'main' },
+  t: { label: 'Carta de Trampa', zone: 'main' },
+};
 
-const ygoprodeck = {
+// Minúsculas, sin acentos y con caracteres de ancho completo normalizados ("Ａ" -> "a")
+function normalizeText(text) {
+  return String(text).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+const ygoIndexes = new Map(); // idioma -> Promise con el índice ya preparado
+
+function loadYgoIndex(lang) {
+  if (!ygoIndexes.has(lang)) {
+    const promise = fetch(`/data/ygo/${lang}.json`)
+      .then((res) => {
+        if (!res.ok) throw new Error('No se pudo cargar el catálogo de Yu-Gi-Oh!');
+        return res.json();
+      })
+      .then((rows) => rows.map((row) => ({ row, name: normalizeText(row[1]), alt: normalizeText(row[2]) })));
+    promise.catch(() => ygoIndexes.delete(lang)); // si falla, se reintenta en la siguiente búsqueda
+    ygoIndexes.set(lang, promise);
+  }
+  return ygoIndexes.get(lang);
+}
+
+// 0 = no coincide; más alto = mejor coincidencia
+function matchScore(text, tokens, whole) {
+  if (!text || !tokens.every((t) => text.includes(t))) return 0;
+  if (text === whole) return 4;
+  if (text.startsWith(whole)) return 3;
+  if (text.split(' ').some((word) => word.startsWith(tokens[0]))) return 2;
+  return 1;
+}
+
+// Imagen pequeña de la carta (YGOJSON usa las de YGOPRODeck y Yugipedia)
+function ygoImage(row) {
+  const id = row[0];
+  const full = row[4] || (/^\d+$/.test(id) ? `https://images.ygoprodeck.com/images/cards/${id}.jpg` : '');
+  return full.replace('://images.ygoprodeck.com/images/cards/', '://images.ygoprodeck.com/images/cards_small/');
+}
+
+const ygojson = {
   languages: YGO_LANGUAGES,
-  note: 'La fuente de datos de Yu-Gi-Oh! no ofrece español. Las imágenes de las cartas solo están en inglés.',
+  note: 'Solo aparecen las cartas con nombre oficial en este idioma. Las imágenes son las de la versión en inglés.',
   async search(query, lang) {
-    const langParam = lang && lang !== 'en' ? `&language=${encodeURIComponent(lang)}` : '';
-    const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(query)}${langParam}&num=30&offset=0`;
-    const data = await getJson(url);
-    if (!data || !data.data) return [];
-    return data.data.map((c) => {
-      const isExtra = EXTRA_DECK_TYPES.some((t) => (c.type || '').includes(t));
-      const img = (c.card_images && c.card_images[0]) || {};
-      const set = (c.card_sets && c.card_sets[0]) || {};
+    const whole = normalizeText(query);
+    if (!whole) return [];
+    const tokens = whole.split(' ');
+    const index = await loadYgoIndex(lang);
+
+    const found = [];
+    for (const entry of index) {
+      // El nombre en el idioma elegido pesa más que el nombre en inglés
+      const score = matchScore(entry.name, tokens, whole) * 10 || matchScore(entry.alt, tokens, whole);
+      if (score) found.push({ entry, score });
+    }
+    found.sort((a, b) => b.score - a.score || a.entry.row[1].length - b.entry.row[1].length);
+
+    return found.slice(0, 30).map(({ entry }) => {
+      const row = entry.row;
+      const kind = YGO_KINDS[row[3]] || YGO_KINDS.m;
       return {
-        cardId: String(c.id),
-        name: c.name,
-        altName: '',
-        imageUrl: img.image_url_small || img.image_url || '',
-        setCode: set.set_code || '',
-        rarity: set.set_rarity || '',
-        typeLine: c.type || '',
-        zoneHint: isExtra ? 'extra' : 'main',
-        language: lang || 'en',
+        cardId: row[0],
+        name: row[1],
+        altName: row[2], // nombre oficial en inglés, como referencia
+        imageUrl: ygoImage(row),
+        setCode: '',
+        rarity: '',
+        typeLine: kind.label,
+        zoneHint: kind.zone,
+        language: lang,
       };
     });
   },
@@ -143,7 +202,7 @@ const digimon = {
   },
 };
 
-const providers = { mtg: scryfall, ygo: ygoprodeck, digimon };
+const providers = { mtg: scryfall, ygo: ygojson, digimon };
 const FALLBACK_LANGUAGES = [{ code: 'en', label: 'English' }];
 
 // Idiomas que ofrece el catálogo de un TCG: [{ code, label }]

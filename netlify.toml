@@ -97,6 +97,13 @@
   [headers.values]
     Content-Type = "application/manifest+json; charset=utf-8"
 
+# Índices de búsqueda de Yu-Gi-Oh! (public/data/ygo): ~1 MB sin comprimir por idioma.
+# Se cachean 1 hora y se pueden servir hasta 1 día mientras se revalidan.
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
+
 # Iconos: caché de 1 día en el navegador (cambian muy rara vez)
 [[headers]]
   for = "/*.png"
