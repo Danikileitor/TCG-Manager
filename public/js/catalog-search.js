@@ -81,13 +81,33 @@ function makeChips(field) {
   };
 }
 
+// Campo numérico con flechas propias (▲ ▼) para subir o bajar el valor.
+// Devuelve el <input>; el contenedor completo está en input.box.
+function numberInput(attrs) {
+  const input = el('input', attrs);
+  const step = (dir) => {
+    try {
+      if (input.value === '' && attrs.min !== undefined && dir > 0) input.value = String(attrs.min);
+      else if (dir > 0) input.stepUp();
+      else input.stepDown();
+    } catch (err) {
+      // valor fuera de rango: se deja como está
+    }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const button = (dir, label, d) =>
+    el('button', { class: 'num-btn', type: 'button', tabindex: '-1', 'aria-label': label, onClick: () => step(dir) }, icon([d], 10));
+  input.box = el('div', { class: 'num' }, input, el('div', { class: 'num-btns' }, button(1, 'Aumentar', 'M6 15l6-6 6 6'), button(-1, 'Disminuir', 'M6 9l6 6 6-6')));
+  return input;
+}
+
 // Valor fijo por defecto; con la casilla "Rango" se pueden indicar mínimo y máximo.
 // El valor devuelto siempre es { min, max } (en valor fijo, min y max son iguales).
 function makeRange(field) {
   const attrs = { type: 'number', inputmode: 'numeric', min: field.min, max: field.max, step: field.step || 1 };
-  const single = el('input', { ...attrs, id: nextId('f'), placeholder: field.placeholder || 'Valor', 'aria-label': field.label });
-  const min = el('input', { ...attrs, placeholder: 'Mín.', 'aria-label': `${field.label}: mínimo` });
-  const max = el('input', { ...attrs, placeholder: 'Máx.', 'aria-label': `${field.label}: máximo` });
+  const single = numberInput({ ...attrs, id: nextId('f'), placeholder: field.placeholder || 'Valor', 'aria-label': field.label });
+  const min = numberInput({ ...attrs, placeholder: 'Mín.', 'aria-label': `${field.label}: mínimo` });
+  const max = numberInput({ ...attrs, placeholder: 'Máx.', 'aria-label': `${field.label}: máximo` });
   const toggle = el('input', { type: 'checkbox' });
   const toggleLabel = el(
     'label',
@@ -96,8 +116,8 @@ function makeRange(field) {
     el('span', { class: 'check-box' }, checkIcon()),
     el('span', { class: 'check-text' }, el('strong', { text: 'Rango' }))
   );
-  const rangeRow = el('div', { class: 'cs-range hidden' }, min, el('span', { class: 'cs-range-sep', text: '–', 'aria-hidden': 'true' }), max);
-  const row = el('div', { class: 'cs-range-line' }, single, rangeRow, toggleLabel);
+  const rangeRow = el('div', { class: 'cs-range hidden' }, min.box, el('span', { class: 'cs-range-sep', text: '–', 'aria-hidden': 'true' }), max.box);
+  const row = el('div', { class: 'cs-range-line' }, single.box, rangeRow, toggleLabel);
 
   function setMode(isRange, carry = true) {
     if (carry && isRange !== !rangeRow.classList.contains('hidden')) {
@@ -110,7 +130,7 @@ function makeRange(field) {
       }
     }
     toggle.checked = isRange;
-    single.classList.toggle('hidden', isRange);
+    single.box.classList.toggle('hidden', isRange);
     rangeRow.classList.toggle('hidden', !isRange);
   }
   toggle.addEventListener('change', () => setMode(toggle.checked));
@@ -140,8 +160,8 @@ function makeRange(field) {
 
 function makeNumber(field) {
   const id = nextId('f');
-  const input = el('input', { id, type: 'number', inputmode: 'numeric', min: field.min, max: field.max, step: field.step || 1, placeholder: field.placeholder || '' });
-  return { node: fieldWrap(field, input, id), read: () => input.value, write: (v) => (input.value = v ?? '') };
+  const input = numberInput({ id, type: 'number', inputmode: 'numeric', min: field.min, max: field.max, step: field.step || 1, placeholder: field.placeholder || '' });
+  return { node: fieldWrap(field, input.box, id), read: () => input.value, write: (v) => (input.value = v ?? '') };
 }
 
 // Texto libre. Con `field.suggest(texto, idioma)` se ofrecen sugerencias mientras se escribe

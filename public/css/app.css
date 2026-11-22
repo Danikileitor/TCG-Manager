@@ -672,7 +672,7 @@
   gap: 0.7rem;
 }
 
-.cs-range-line > input {
+.cs-range-line > .num {
   flex: 1;
   min-width: 0;
 }
@@ -787,4 +787,64 @@
   font-size: 0.68rem;
   font-weight: 600;
   vertical-align: middle;
+}
+
+
+/* ----- Campos numéricos con flechas propias ----- */
+.num {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.num input {
+  width: 100%;
+  padding-right: 2.1rem;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.num input::-webkit-outer-spin-button,
+.num input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.num-btns {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  width: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.num-btn {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  line-height: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, transform 0.08s;
+}
+
+.num-btn:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.num-btn:active {
+  transform: scale(0.92);
+}
+
+.num:has(input:disabled) .num-btns {
+  opacity: 0.4;
+  pointer-events: none;
 }
