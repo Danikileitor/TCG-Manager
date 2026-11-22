@@ -159,7 +159,7 @@ En el constructor de mazos, los filtros solo están en la pestaña **Catálogo**
 
 - **Tooltip:** al pasar el ratón sobre una carta (colección, resultados del catálogo y mazo) aparece en grande para leer el texto. Solo en dispositivos con ratón.
 - **Vista 3D:** al hacer clic se abre un popup con el fondo oscurecido y la carta en un `<canvas>` WebGL. Arrastra para girarla en horizontal, rueda o pellizco para zoom, Mayús + arrastrar para moverla, botón o tecla `F` para darle la vuelta, `0` o doble clic para restablecer, `Esc` para cerrar.
-- **Dorso:** las cartas de dos caras de MTG guardan `imageBack` (colección y mazos). Las demás muestran un dorso genérico. Las cartas de dos caras guardadas antes de esta versión no lo tienen hasta que se vuelvan a añadir.
+- **Dorso:** las cartas de dos caras de MTG guardan `imageBack` (colección y mazos). Las demás muestran el dorso de su juego: se busca `public/img/backs/<juego>.webp|jpg|png` (`ygo`, `digimon`, `digimon-egg` para los Digi-Egg, que tienen otro dorso, y `mtg`; ver `LEEME.txt` en esa carpeta) y, para MTG, el dorso oficial de Scryfall como respaldo. **Debes añadir tú las imágenes de Yu-Gi-Oh! y Digimon (normal y Digi-Egg)** (no se incluyen por ser material con derechos de autor). Si no hay imagen, se dibuja un dorso genérico. Las cartas de dos caras guardadas antes de esta versión no lo tienen hasta que se vuelvan a añadir.
 - **CORS:** WebGL solo puede usar imágenes de servidores que lo permitan (Scryfall y YGOPRODeck lo hacen). Si no, o si el navegador no tiene WebGL, se usa automáticamente una vista equivalente con CSS 3D.
 
 ### Yu-Gi-Oh!: índice de YGOJSON

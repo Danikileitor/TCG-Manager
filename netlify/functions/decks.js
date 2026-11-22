@@ -19,6 +19,7 @@ function sanitizeCards(cards, game) {
     name: str(c.name, 200),
     imageUrl: str(c.imageUrl, 500),
     imageBack: str(c.imageBack, 500),
+    backKind: str(c.backKind, 20),
     language: VALID_LANGUAGES.includes(c.language) ? c.language : 'en',
     quantity: Math.max(1, Math.min(99, parseInt(c.quantity, 10) || 1)),
     zone: zones.includes(c.zone) ? c.zone : 'main',

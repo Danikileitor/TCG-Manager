@@ -69,6 +69,7 @@ export function markPreviewable(node, card) {
   node.dataset.cardName = card.name || '';
   node.dataset.cardImage = image;
   node.dataset.cardBack = safeImageUrl(card.imageBack) || '';
+  node.dataset.cardBackKind = card.backKind || (card.zone === 'digi-egg' ? 'egg' : '');
   return node;
 }
 

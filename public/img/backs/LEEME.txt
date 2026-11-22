@@ -1,0 +1,7 @@
+Dorsos de las cartas de una sola cara (vista 3D).
+Coloca aquí la imagen del dorso de cada juego con este nombre (webp, jpg o png):
+  ygo.jpg      -> Yu-Gi-Oh!
+  digimon.jpg  -> Digimon Card Game
+  digimon-egg.jpg -> Digimon: dorso de los Digi-Egg (Digitama), que es distinto
+  mtg.jpg      -> Magic (opcional: si falta, se usa el dorso de Scryfall)
+Proporción recomendada 63:88 (por ejemplo 488x680 px).

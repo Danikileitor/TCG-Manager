@@ -7,7 +7,7 @@
 //                -> { cards, hasMore, total }
 //
 // Cada carta normalizada tiene la forma:
-//   { cardId, name, altName, imageUrl, imageBack, setCode, rarity, typeLine, statLine, zoneHint, language, isAlt }
+//   { cardId, name, altName, imageUrl, imageBack, backKind, setCode, rarity, typeLine, statLine, zoneHint, language, isAlt }
 //
 // El catálogo NO se guarda en tu base de datos: solo guardas lo que posee cada
 // usuario y sus mazos (referenciando cardId). Si alguna fuente cambia, solo hay que
@@ -1019,6 +1019,7 @@ const digimon = {
         typeLine: type,
         statLine: digimonLine(c),
         zoneHint: /egg/i.test(type) ? 'digi-egg' : 'main',
+        backKind: /egg/i.test(type) ? 'egg' : '', // los Digi-Egg tienen un dorso distinto
         language: 'en',
         isAlt: /_P\d+$/i.test(String(id)),
       };

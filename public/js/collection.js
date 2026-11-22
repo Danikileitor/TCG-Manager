@@ -138,6 +138,7 @@ async function addFromCatalog(result) {
       name: result.name,
       imageUrl: result.imageUrl,
       imageBack: result.imageBack || '',
+      backKind: result.backKind || '',
       setCode: result.setCode,
       rarity: result.rarity,
       language: result.language || catalogLang, // idioma de esta copia (nombre e imagen oficiales)

@@ -207,6 +207,7 @@ function addCardToDeck(card, zoneOverride) {
       name: card.name,
       imageUrl: card.imageUrl || '',
       imageBack: card.imageBack || '',
+      backKind: card.backKind || '',
       language: card.language || catalogLang,
       quantity: 1,
       zone,

@@ -117,6 +117,45 @@ async function loadCardImage(small, { cors }) {
 }
 
 // ====================================================================
+// Dorso real de cada juego (cartas de una sola cara)
+// ====================================================================
+// Se busca primero un archivo propio en /img/backs/<juego>.(webp|jpg|png) (mismo origen, así WebGL
+// siempre puede usarlo). Para MTG hay además un respaldo en Scryfall. Si no hay ninguno, dorso genérico.
+const DEFAULT_BACKS = {
+  mtg: ['https://backs.scryfall.io/large/2/2/222b7a3b-2321-4d4c-af19-19338b134971.jpg'],
+};
+const backCache = {};
+
+function currentGame() {
+  try {
+    return new URLSearchParams(location.search).get('game') || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+async function findDefaultBack(kind) {
+  const game = currentGame();
+  if (!/^[a-z0-9-]+$/.test(game)) return '';
+  // Algunos tipos de carta tienen un dorso distinto (p. ej. Digi-Egg de Digimon): archivo <juego>-<tipo>
+  const name = /^[a-z0-9]+$/.test(kind || '') ? `${game}-${kind}` : game;
+  if (backCache[name] !== undefined) return backCache[name];
+  const candidates = [`/img/backs/${name}.webp`, `/img/backs/${name}.jpg`, `/img/backs/${name}.png`, ...(name === game ? DEFAULT_BACKS[game] || [] : [])];
+  let found = '';
+  for (const url of candidates) {
+    try {
+      await loadImage(url, { cors: false });
+      found = url;
+      break;
+    } catch (err) {
+      /* siguiente candidato */
+    }
+  }
+  backCache[name] = found;
+  return found;
+}
+
+// ====================================================================
 // Matemáticas mínimas de matrices 4x4 (column-major, como WebGL)
 // ====================================================================
 const mat = {
@@ -396,7 +435,7 @@ function buildDialog() {
   return { dlg, title, note, stage, status, hint, buttons: { flipBtn, zoomOut, zoomIn, reset, close } };
 }
 
-export async function openCardViewer({ name, imageUrl, imageBack }) {
+export async function openCardViewer({ name, imageUrl, imageBack, backKind }) {
   if (!imageUrl) return;
   hideTip();
   if (!dialog) dialog = buildDialog();
@@ -409,6 +448,8 @@ export async function openCardViewer({ name, imageUrl, imageBack }) {
   ui.status.classList.remove('hidden');
   ui.stage.textContent = '';
   if (!ui.dlg.open) ui.dlg.showModal();
+  const ownBack = !!imageBack;
+  if (!imageBack) imageBack = await findDefaultBack(backKind);
 
   // Estado de la vista
   const state = { yaw: 0, pitch: 0, zoom: 1, panX: 0, panY: 0 };
@@ -517,7 +558,7 @@ export async function openCardViewer({ name, imageUrl, imageBack }) {
     }
     ui.status.classList.add('hidden');
     ui.stage.dataset.renderer = renderer.kind;
-    ui.note.textContent = backIsGeneric ? 'Dorso genérico' : 'Carta de dos caras';
+    ui.note.textContent = backIsGeneric ? 'Dorso genérico' : ownBack ? 'Carta de dos caras' : 'Dorso del juego';
     renderer.resize();
     draw();
   }
@@ -779,6 +820,6 @@ export function initCardPreview() {
     const target = e.target.closest && e.target.closest('.previewable');
     if (!target) return;
     e.preventDefault();
-    openCardViewer({ name: target.dataset.cardName, imageUrl: target.dataset.cardImage, imageBack: target.dataset.cardBack });
+    openCardViewer({ name: target.dataset.cardName, imageUrl: target.dataset.cardImage, imageBack: target.dataset.cardBack, backKind: target.dataset.cardBackKind });
   });
 }
