@@ -462,7 +462,6 @@ const scryfall = {
   note: '',
   filters: MTG_FILTERS,
   altArtsLabel: 'Incluir artes alternativos',
-  altArtsHint: 'Muestra una carta por cada ilustración distinta.',
   async search(query, lang, { filters = {}, altArts = false, page = 1 } = {}) {
     const q = buildScryfallQuery(query, lang, filters, hasText(filters.subtype) ? ensureMtgTypes(lang).dict : null);
     // unique=art: una carta por ilustración (incluye artes alternativos); unique=cards: una por carta
@@ -742,7 +741,6 @@ const ygojson = {
   note: '',
   filters: YGO_FILTERS,
   altArtsLabel: 'Incluir artes alternativos',
-  altArtsHint: 'Añade las versiones con otra ilustración de cada carta.',
   async search(query, lang, { filters = {}, altArts = false, page = 1 } = {}) {
     const whole = normalizeText(query);
     const active = ygoActiveFilters(filters);
@@ -977,10 +975,42 @@ async function fetchDigimon(params) {
   return cards;
 }
 
-// Filtros que la API no tiene: rareza y artes alternativos (número con "_P1", "_P2"...)
+// ¿Es una versión alternativa? La API no lo documenta, así que se miran varias pistas:
+// número con sufijo "_P1", "_P2"... (también en pretty_url) o "Alternate Art"/"Parallel" en el nombre de TCGplayer.
+export function isDigimonAlt(c) {
+  const id = String(c.id || c.cardnumber || c.card_number || '');
+  return (
+    /_P\d+$/i.test(id) ||
+    /-p\d+$/i.test(String(c.pretty_url || '')) ||
+    /alternat(e|ive)[ -]art|parallel/i.test(String(c.tcgplayer_name || ''))
+  );
+}
+
+// Si una versión alternativa llega con el mismo número que la normal, se le da un número propio
+// (<número>_P1, _P2...) para que sea una carta distinta con su propia imagen.
+export function normalizeDigimonAlts(cards) {
+  const seen = new Set();
+  const count = {};
+  return cards.map((c) => {
+    const id = String(c.id || c.cardnumber || c.card_number || '');
+    const alt = isDigimonAlt(c);
+    let finalId = id;
+    if (alt && !/_P\d+$/i.test(id)) {
+      const base = id.replace(/_P\d+$/i, '');
+      count[base] = (count[base] || 0) + 1;
+      finalId = `${base}_P${count[base]}`;
+    } else if (!alt && seen.has(id)) {
+      return null; // duplicado exacto de una carta normal
+    }
+    seen.add(finalId);
+    return { ...c, id: finalId, _alt: alt };
+  }).filter(Boolean);
+}
+
+// Filtros que la API no tiene: rareza y artes alternativos
 export function filterDigimonCards(cards, { rarity = [], altArts = false } = {}) {
-  let list = cards;
-  if (!altArts) list = list.filter((c) => !/_P\d+$/i.test(String(c.id || c.cardnumber || '')));
+  let list = normalizeDigimonAlts(cards);
+  if (!altArts) list = list.filter((c) => !c._alt);
   const wanted = Array.isArray(rarity) ? rarity.filter((r) => DIGIMON_RARITIES[r]) : [];
   if (wanted.length) {
     list = list.filter((c) => {
@@ -996,7 +1026,6 @@ const digimon = {
   note: '',
   filters: DIGIMON_FILTERS,
   altArtsLabel: 'Incluir artes alternativos',
-  altArtsHint: 'Incluye las versiones paralelas (Alternative Art).',
   async search(query, lang, { filters = {}, altArts = false, page = 1 } = {}) {
     const { params, searchable } = buildDigimonParams(query, filters);
     const rarity = filters.rarity || [];
@@ -1021,7 +1050,7 @@ const digimon = {
         zoneHint: /egg/i.test(type) ? 'digi-egg' : 'main',
         backKind: /egg/i.test(type) ? 'egg' : '', // los Digi-Egg tienen un dorso distinto
         language: 'en',
-        isAlt: /_P\d+$/i.test(String(id)),
+        isAlt: Boolean(c._alt),
       };
     });
     return { cards, hasMore: list.length > page * PAGE_SIZE, total: list.length };

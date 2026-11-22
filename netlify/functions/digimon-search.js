@@ -48,6 +48,8 @@ function slim(c) {
     rarity: c.rarity,
     set_name: c.set_name,
     image_url: c.image_url,
+    pretty_url: c.pretty_url,
+    tcgplayer_name: c.tcgplayer_name,
   };
 }
 
