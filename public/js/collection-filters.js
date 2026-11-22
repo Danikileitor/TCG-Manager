@@ -3,6 +3,7 @@
 // que existan en su colección). Reutiliza los controles del buscador del catálogo.
 import { MAKERS, isEmptyValue, describeValue, filterIcon, closeIcon, nextId } from './catalog-search.js';
 import { langShort } from './language.js';
+import { mtgTypeTranslator } from './card-providers.js';
 import { el, clear } from './ui.js';
 
 const MTG_COLOR_INFO = {
@@ -42,7 +43,8 @@ export const SORTS = [
 ];
 
 // Esquema de filtros que se ofrece según las cartas del usuario
-export function buildSchema(gameKey, cards) {
+export function buildSchema(gameKey, cards, lang = 'en', onUpdate = () => {}) {
+  const tr = gameKey === 'mtg' ? mtgTypeTranslator(lang, onUpdate) : (w) => w;
   const labels = NUMBER_LABELS[gameKey] || {};
   const hasFacets = cards.some((c) => c.facets);
   const groups = [];
@@ -67,13 +69,24 @@ export function buildSchema(gameKey, cards) {
     if (types.length) {
       fields.push({
         id: 'types', label: 'Tipo (deben tenerse todos)', type: 'chips',
-        options: types.map((v) => ({ value: v, label: (gameKey === 'mtg' && MTG_TYPE_ES[v]) || v })),
+        options: types.map((v) => ({ value: v, label: gameKey === 'mtg' ? (tr(v) !== v ? tr(v) : lang === 'en' ? v : MTG_TYPE_ES[v] || v) : v })),
       });
     }
     const attrs = uniqSorted(cards.map((c) => facet(c, 'attribute')));
     if (attrs.length) fields.push({ id: 'attribute', label: 'Atributo', type: 'chips', options: attrs.map((v) => ({ value: v, label: v })) });
     const subtypes = uniqSorted(cards.flatMap((c) => facet(c, 'subtypes') || []));
-    if (subtypes.length) fields.push({ id: 'subtypes', label: 'Subtipo / raza / rasgo', type: 'text', suggestions: subtypes.slice(0, 400), placeholder: 'Escribe para filtrar…' });
+    if (subtypes.length) {
+      const field = { id: 'subtypes', label: 'Subtipo / raza / rasgo', type: 'text', placeholder: 'Escribe para filtrar…' };
+      if (gameKey === 'mtg') {
+        // En MTG se sugieren en el idioma elegido (los subtipos se guardan en inglés)
+        field.suggest = (text, l, refresh) => {
+          const translate = mtgTypeTranslator(l, refresh);
+          const q = norm(text);
+          return uniqSorted(subtypes.map(translate)).filter((v) => norm(v).startsWith(q) || norm(v).includes(` ${q}`)).slice(0, 80);
+        };
+      } else field.suggestions = subtypes.slice(0, 400);
+      fields.push(field);
+    }
     for (const key of ['cost', 'level', 'power']) {
       if (labels[key] && cards.some((c) => typeof facet(c, key) === 'number')) fields.push({ id: key, label: labels[key], type: 'range', min: 0, placeholder: 'Valor' });
     }
@@ -104,7 +117,7 @@ const inRange = (value, r) => {
 };
 
 // ¿Cumple la carta los filtros aplicados? (values: { idCampo: valor })
-export function matchesFilters(card, values) {
+export function matchesFilters(card, values, translate = null) {
   for (const [id, v] of Object.entries(values)) {
     switch (id) {
       case 'colors': {
@@ -126,7 +139,9 @@ export function matchesFilters(card, values) {
         break;
       case 'subtypes': {
         const have = facet(card, 'subtypes');
-        if (!have || !have.some((s) => norm(s).includes(norm(v)))) return false;
+        // Se acepta lo escrito en inglés o en el idioma elegido / el de la propia carta (MTG)
+        const q = norm(v);
+        if (!have || !have.some((s) => norm(s).includes(q) || (translate && translate(s, card).some((t) => norm(t).includes(q))))) return false;
         break;
       }
       case 'cost': case 'level': case 'power':
@@ -169,7 +184,7 @@ export function matchesName(card, text) {
 
 // Panel de filtros (diálogo lateral, como el del catálogo) + etiquetas de filtros activos.
 // getCards(): cartas actuales. onChange(): se llama al aplicar o quitar filtros.
-export function createCollectionFilters({ gameKey, mount, getCards, onChange }) {
+export function createCollectionFilters({ gameKey, mount, getCards, onChange, getLang = () => 'en' }) {
   let applied = {};
   let controls = new Map();
   let fields = [];
@@ -192,7 +207,7 @@ export function createCollectionFilters({ gameKey, mount, getCards, onChange }) 
   mount.append(filtersBtn);
   document.body.append(dialog);
 
-  const schema = () => buildSchema(gameKey, getCards());
+  const schema = () => buildSchema(gameKey, getCards(), getLang(), () => {});
   const countable = (id) => id !== 'colorMode';
   const activeIds = () => Object.keys(applied).filter(countable);
 
@@ -204,7 +219,7 @@ export function createCollectionFilters({ gameKey, mount, getCards, onChange }) 
     groups.forEach((group) => {
       const fieldset = el('fieldset', { class: 'cs-group' }, el('legend', { text: group.title }));
       group.fields.forEach((f) => {
-        const control = MAKERS[f.type](f, { getLang: () => 'es' });
+        const control = MAKERS[f.type](f, { getLang });
         controls.set(f.id, control);
         fieldset.append(control.node);
       });
@@ -267,6 +282,8 @@ export function createCollectionFilters({ gameKey, mount, getCards, onChange }) 
 
   return {
     activeBox,
+    // Nombres posibles de un subtipo guardado en inglés: en el idioma elegido y en el de la carta
+    translate: (sub, card) => (gameKey === 'mtg' ? [...new Set([mtgTypeTranslator(getLang())(sub), mtgTypeTranslator(card.language)(sub)])] : []),
     get values() { return applied; },
     hasActive: () => activeIds().length > 0,
     // Hay que llamarlo si cambian las cartas: quita filtros de valores que ya no existen y repinta

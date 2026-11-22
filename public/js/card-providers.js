@@ -400,6 +400,21 @@ export function ensureMtgTypes(lang, onUpdate = () => {}) {
   return state;
 }
 
+// Traduce un tipo o subtipo de MTG del inglés al idioma indicado (con lo aprendido de las cartas de ese
+// idioma). Lo que aún no se conoce se deja en inglés. Devuelve una función: (palabra) => texto.
+export function mtgTypeTranslator(lang, onUpdate = () => {}) {
+  if (!lang || lang === 'en') return (word) => word;
+  const state = ensureMtgTypes(lang, onUpdate);
+  return (word) => {
+    if (state.reverseSize !== state.dict.size) {
+      state.reverse = new Map();
+      for (const [key, english] of state.dict) state.reverse.set(normalizeText(english), state.words.get(key) || '');
+      state.reverseSize = state.dict.size;
+    }
+    return state.reverse.get(normalizeText(word)) || word;
+  };
+}
+
 // Sugerencias para el campo de subtipo: la última palabra escrita se completa con los tipos del idioma
 export function suggestMtgTypes(text, lang, onUpdate) {
   const state = ensureMtgTypes(lang, onUpdate);

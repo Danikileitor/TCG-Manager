@@ -27,7 +27,7 @@ let filters = null;
 function visibleCards() {
   const text = filterInput.value;
   const values = filters ? filters.values : {};
-  return sortCards(cards.filter((c) => matchesName(c, text) && matchesFilters(c, values)), sortSelect.value);
+  return sortCards(cards.filter((c) => matchesName(c, text) && matchesFilters(c, values, filters && filters.translate)), sortSelect.value);
 }
 
 function renderStats(list) {
@@ -223,6 +223,7 @@ async function init() {
     mount: document.getElementById('filters-mount'),
     getCards: () => cards,
     onChange: renderCollection,
+    getLang: () => catalogLang,
   });
   document.getElementById('filters-active').append(filters.activeBox);
 
