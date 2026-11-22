@@ -3,13 +3,22 @@
 // imagen en un tamaño mayor cuando la fuente lo permite (Scryfall y YGOPRODeck).
 export function sizedUrl(url, size) {
   if (!url) return '';
-  // Scryfall: .../small/front/... -> .../normal/... o .../large/...
+  // Scryfall: .../small/front/... -> normal (tooltip) o png (vista 3D, 745x1040 px)
   if (url.includes('://cards.scryfall.io/')) {
-    return url.replace(/\/(small|normal|large|png)\//, `/${size === 'tip' ? 'normal' : 'large'}/`);
+    if (size === 'tip') return url.replace(/\/(small|normal|large|png)\//, '/normal/').replace(/\.png(\?|$)/, '.jpg$1');
+    return url.replace(/\/(small|normal|large|png)\//, '/png/').replace(/\.jpg(\?|$)/, '.png$1');
   }
   // YGOPRODeck: /cards_small/ -> /cards/ (tamaño completo)
   if (url.includes('://images.ygoprodeck.com/images/cards_small/')) {
     return url.replace('/images/cards_small/', '/images/cards/');
   }
   return url;
+}
+
+// Versiones a probar para la vista 3D, de mejor a peor calidad (la última es la imagen original)
+export function viewerUrls(url) {
+  const list = [sizedUrl(url, 'large')];
+  if (url.includes('://cards.scryfall.io/')) list.push(url.replace(/\/(small|normal|large|png)\//, '/large/').replace(/\.png(\?|$)/, '.jpg$1'));
+  list.push(url);
+  return [...new Set(list)];
 }

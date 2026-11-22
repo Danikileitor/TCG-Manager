@@ -10,7 +10,7 @@
 // WebGL necesita que el servidor de la imagen permita su uso en un canvas (cabecera CORS). Si no
 // lo permite, o el navegador no tiene WebGL, se usa automáticamente la misma vista con
 // transformaciones CSS 3D, que funciona con cualquier imagen.
-import { sizedUrl } from './card-images.js';
+import { sizedUrl, viewerUrls } from './card-images.js';
 
 const CARD_ASPECT = 63 / 88; // proporción de una carta (ancho / alto)
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -105,14 +105,55 @@ function loadImage(url, { cors }) {
   });
 }
 
-// Prueba la versión grande; si no existe, la pequeña original
+// Prueba las versiones de mayor a menor calidad hasta que una cargue
 async function loadCardImage(small, { cors }) {
-  const large = sizedUrl(small, 'large');
+  let lastError = null;
+  for (const url of viewerUrls(small)) {
+    try {
+      return await loadImage(url, { cors });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+// Las imágenes pequeñas (p. ej. 421x614 px) se ven borrosas al ampliarlas: se escalan al doble con
+// suavizado de calidad y un filtro de nitidez ligero. No inventa detalle, pero el texto se lee mejor.
+// Solo funciona con imágenes que se pueden leer (CORS); si no, se usa la original.
+function enhanceImage(img) {
   try {
-    return await loadImage(large, { cors });
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || h >= 1000) return img;
+    const k = h < 700 ? 2 : 1.5;
+    const out = document.createElement('canvas');
+    out.width = Math.round(w * k);
+    out.height = Math.round(h * k);
+    const g = out.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, out.width, out.height);
+    if (!('filter' in g)) return out;
+    const blurred = document.createElement('canvas');
+    blurred.width = out.width;
+    blurred.height = out.height;
+    const bg = blurred.getContext('2d', { willReadFrequently: true });
+    bg.filter = 'blur(1.4px)';
+    bg.drawImage(out, 0, 0);
+    const a = g.getImageData(0, 0, out.width, out.height);
+    const b = bg.getImageData(0, 0, out.width, out.height).data;
+    const d = a.data;
+    const amount = 0.9;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = Math.max(0, Math.min(255, d[i] + (d[i] - b[i]) * amount));
+      d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + (d[i + 1] - b[i + 1]) * amount));
+      d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + (d[i + 2] - b[i + 2]) * amount));
+    }
+    g.putImageData(a, 0, 0);
+    return out;
   } catch (err) {
-    if (large === small) throw err;
-    return loadImage(small, { cors });
+    return img; // imagen contaminada u otro error: sin mejora
   }
 }
 
@@ -537,7 +578,8 @@ export async function openCardViewer({ name, imageUrl, imageBack, backKind }) {
       if (disposed) return gl.dispose();
       if (back === generic && imageBack) backIsGeneric = true;
       gl.resize();
-      gl.setTextures(front, back); // puede lanzar SecurityError
+      gl.setTextures(enhanceImage(front), enhanceImage(back)); // puede lanzar SecurityError
+      ui.stage.dataset.texture = `${front.naturalWidth}x${front.naturalHeight}`;
       renderer = gl;
     } catch (err) {
       ui.stage.textContent = '';

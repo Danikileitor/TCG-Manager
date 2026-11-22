@@ -1021,6 +1021,64 @@ export function filterDigimonCards(cards, { rarity = [], altArts = false } = {})
   return list;
 }
 
+// Plan B para los artes alternativos: si la API no devuelve versiones paralelas, se comprueba si
+// existe la imagen <número>_P1, _P2... en el servidor de imágenes (la numeración oficial de Bandai).
+const DIGIMON_IMG = 'https://images.digimoncard.io/images/cards/';
+const DIGIMON_ALT_MAX = 4;
+const altProbeCache = new Map(); // id base -> [ids alternativos]
+
+function imageExists(url, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    if (typeof Image === 'undefined') return resolve(false);
+    const img = new Image();
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img.naturalWidth > 50);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    img.referrerPolicy = 'no-referrer';
+    img.src = url;
+  });
+}
+
+async function probeAltsFor(baseId) {
+  if (altProbeCache.has(baseId)) return altProbeCache.get(baseId);
+  const found = [];
+  for (let n = 1; n <= DIGIMON_ALT_MAX; n++) {
+    if (!(await imageExists(`${DIGIMON_IMG}${baseId}_P${n}.jpg`))) break;
+    found.push(`${baseId}_P${n}`);
+  }
+  altProbeCache.set(baseId, found);
+  return found;
+}
+
+// Añade, tras cada carta normal, sus versiones alternativas que la API no haya devuelto
+export async function addProbedDigimonAlts(cards, probe = probeAltsFor) {
+  const have = new Set(cards.map((c) => String(c.id)));
+  const bases = cards.filter((c) => !c._alt && /^[A-Za-z0-9]+-\d+$/.test(String(c.id)) && !cards.some((o) => o._alt && String(o.id).startsWith(`${c.id}_P`)));
+  const results = new Map();
+  let index = 0;
+  const worker = async () => {
+    while (index < bases.length) {
+      const base = bases[index++];
+      results.set(base.id, await probe(String(base.id)));
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
+  const out = [];
+  for (const c of cards) {
+    out.push(c);
+    for (const altId of results.get(c.id) || []) {
+      if (!have.has(altId)) out.push({ ...c, id: altId, image_url: `${DIGIMON_IMG}${altId}.jpg`, _alt: true });
+    }
+  }
+  return out;
+}
+
 const digimon = {
   languages: [{ code: 'en', label: 'English' }],
   note: '',
@@ -1034,7 +1092,8 @@ const digimon = {
     if (searchable.length === 0) throw new Error('La rareza se combina con otro criterio: añade un nombre, un color, un tipo u otro filtro');
 
     const list = filterDigimonCards(await fetchDigimon(params), { rarity, altArts });
-    const slice = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    let slice = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    if (altArts) slice = await addProbedDigimonAlts(slice);
     const cards = slice.map((c) => {
       const id = c.id || c.cardnumber || c.card_number || c.name;
       const type = c.type || c.card_type || '';
