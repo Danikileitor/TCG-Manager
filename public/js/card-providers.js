@@ -1084,7 +1084,7 @@ const digimon = {
         cardId: String(id),
         name: c.name,
         altName: '',
-        imageUrl: c.image_url || (id ? `https://images.digimoncard.io/images/cards/${id}.jpg` : ''),
+        imageUrl: c.image_url || (id ? `${DIGIMON_ALT_IMG}${id}.webp` : ''), // mayor resolución que la de digimoncard.io
         setCode: Array.isArray(c.set_name) ? c.set_name[0] || '' : c.set_name || '',
         rarity: c.card_rarity || c.rarity || '',
         typeLine: type,

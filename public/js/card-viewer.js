@@ -10,7 +10,7 @@
 // WebGL necesita que el servidor de la imagen permita su uso en un canvas (cabecera CORS). Si no
 // lo permite, o el navegador no tiene WebGL, se usa automáticamente la misma vista con
 // transformaciones CSS 3D, que funciona con cualquier imagen.
-import { sizedUrl, viewerUrls, imageFallback } from './card-images.js';
+import { sizedUrl, viewerUrls, imageChain } from './card-images.js';
 
 const CARD_ASPECT = 63 / 88; // proporción de una carta (ancho / alto)
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -820,7 +820,7 @@ function showTip(target) {
     tip.classList.add('show');
     placeTip();
   };
-  const queue = [small, imageFallback(small)].filter((u) => u && u !== big);
+  const queue = [small, ...imageChain(small)].filter((u) => u && u !== big);
   tipImg.onerror = () => {
     const next = queue.shift();
     if (next) tipImg.src = next; // si no existe el tamaño grande, la imagen original o su alternativa

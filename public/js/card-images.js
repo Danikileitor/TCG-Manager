@@ -20,14 +20,34 @@ export function viewerUrls(url) {
   const list = [sizedUrl(url, 'large')];
   if (url.includes('://cards.scryfall.io/')) list.push(url.replace(/\/(small|normal|large|png)\//, '/large/').replace(/\.png(\?|$)/, '.jpg$1'));
   list.push(url);
-  const fb = imageFallback(url);
-  if (fb) list.push(fb);
+  list.push(...imageChain(url));
   return [...new Set(list)];
 }
 
-// Imagen alternativa cuando la principal no existe. Los artes alternativos de Digimon se piden al
-// servidor de imágenes de la comunidad (web-garage.takaotaku.de); si falla, se prueba la lista oficial de Bandai.
+// Digimon: las imágenes del servidor de la comunidad (web-garage.takaotaku.de) tienen más resolución que las de
+// digimoncard.io, y tiene tanto las normales como los artes alternativos. Se usan como primera opción.
+const DIGIMON_IO = /^https:\/\/images\.digimoncard\.io\/images\/cards\/([A-Za-z0-9_-]+)\.(?:jpg|webp|png)(?:\?.*)?$/;
+const DIGIMON_GARAGE = /^https:\/\/web-garage\.takaotaku\.de\/([A-Za-z0-9_-]+)\.webp(?:\?.*)?$/;
+const DIGIMON_IO_WEBP = 'https://images.digimoncard.io/images/cards/';
+
+// Cambia una imagen de digimoncard.io (la que guardan las cartas ya añadidas) por la de mayor resolución
+export function betterImageUrl(url) {
+  const m = DIGIMON_IO.exec(url || '');
+  return m ? `https://web-garage.takaotaku.de/${m[1]}.webp` : url;
+}
+
+// Siguiente imagen a probar cuando una no existe ('' si no quedan). Digimon: servidor de la comunidad ->
+// digimoncard.io (.webp) -> lista oficial de Bandai.
 export function imageFallback(url) {
-  const m = /^https:\/\/web-garage\.takaotaku\.de\/([A-Za-z0-9_-]+)\.webp(?:\?.*)?$/.exec(url || '');
+  let m = DIGIMON_GARAGE.exec(url || '');
+  if (m) return `${DIGIMON_IO_WEBP}${m[1]}.webp`;
+  m = DIGIMON_IO.exec(url || '');
   return m ? `https://world.digimoncard.com/images/cardlist/card/${m[1].replace(/-Errata$/, '')}.png` : '';
+}
+
+// Cadena completa de alternativas
+export function imageChain(url) {
+  const chain = [];
+  for (let next = imageFallback(url); next && chain.length < 5; next = imageFallback(next)) chain.push(next);
+  return chain;
 }

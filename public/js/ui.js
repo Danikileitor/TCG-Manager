@@ -1,4 +1,4 @@
-import { imageFallback } from './card-images.js';
+import { imageFallback, betterImageUrl } from './card-images.js';
 
 // Utilidades de interfaz. Se construye el DOM con textContent (nunca innerHTML
 // con datos de usuario) para evitar XSS.
@@ -64,12 +64,11 @@ export function safeImageUrl(url) {
 
 // Si la imagen no carga, prueba la alternativa (si la hay) y, si tampoco, llama a onFail
 export function withImageFallback(img, onFail) {
+  let tries = 0;
   img.addEventListener('error', () => {
-    const fb = img.dataset.fallbackTried ? '' : imageFallback(img.getAttribute('src'));
-    if (fb) {
-      img.dataset.fallbackTried = '1';
-      img.src = fb;
-    } else onFail();
+    const fb = tries++ < 4 ? imageFallback(img.getAttribute('src')) : '';
+    if (fb) img.src = fb;
+    else onFail();
   });
   return img;
 }
@@ -77,7 +76,7 @@ export function withImageFallback(img, onFail) {
 // Marca un elemento para que, al pasar el ratón, se vea la carta en grande (tooltip) y, al
 // hacer clic, se abra la vista 3D (card-viewer.js, que escucha estos atributos).
 export function markPreviewable(node, card) {
-  const image = safeImageUrl(card.imageUrl);
+  const image = betterImageUrl(safeImageUrl(card.imageUrl));
   if (!image) return node;
   node.classList.add('previewable');
   node.dataset.cardName = card.name || '';
@@ -88,7 +87,7 @@ export function markPreviewable(node, card) {
 }
 
 export function cardThumb(card) {
-  const src = safeImageUrl(card.imageUrl);
+  const src = betterImageUrl(safeImageUrl(card.imageUrl));
   const box = el('div', { class: 'thumb' });
   if (src) {
     const img = markPreviewable(el('img', { src, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' }), card);
