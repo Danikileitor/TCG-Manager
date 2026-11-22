@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
 import { createCatalogSearch } from './catalog-search.js';
+import { initCardPreview } from './card-viewer.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
 
@@ -136,6 +137,7 @@ async function addFromCatalog(result) {
       cardId: result.cardId,
       name: result.name,
       imageUrl: result.imageUrl,
+      imageBack: result.imageBack || '',
       setCode: result.setCode,
       rarity: result.rarity,
       language: result.language || catalogLang, // idioma de esta copia (nombre e imagen oficiales)
@@ -190,4 +192,5 @@ async function init() {
   loadCollection();
 }
 
+initCardPreview();
 init();

@@ -69,6 +69,7 @@ exports.handler = async (event) => {
           $set: {
             name,
             imageUrl: str(body.imageUrl, 500),
+            imageBack: str(body.imageBack, 500),
             setCode: str(body.setCode, 30),
             rarity: str(body.rarity, 50),
             notes: str(body.notes, 500),

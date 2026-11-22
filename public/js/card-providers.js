@@ -7,7 +7,7 @@
 //                -> { cards, hasMore, total }
 //
 // Cada carta normalizada tiene la forma:
-//   { cardId, name, altName, imageUrl, setCode, rarity, typeLine, statLine, zoneHint, language, isAlt }
+//   { cardId, name, altName, imageUrl, imageBack, setCode, rarity, typeLine, statLine, zoneHint, language, isAlt }
 //
 // El catálogo NO se guarda en tu base de datos: solo guardas lo que posee cada
 // usuario y sus mazos (referenciando cardId). Si alguna fuente cambia, solo hay que
@@ -486,6 +486,8 @@ const scryfall = {
     }
     const cards = data.data.map((c) => {
       const face = c.image_uris || (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris) || {};
+      // Cartas de dos caras: la segunda cara tiene su propia imagen
+      const backFace = !c.image_uris && c.card_faces && c.card_faces[1] && c.card_faces[1].image_uris;
       const name = mtgPrintedName(c);
       const pt = c.power !== undefined && c.toughness !== undefined ? `${c.power}/${c.toughness}` : '';
       return {
@@ -493,6 +495,7 @@ const scryfall = {
         name,
         altName: name !== c.name ? c.name : '', // nombre oficial en inglés, como referencia
         imageUrl: face.small || face.normal || '',
+        imageBack: (backFace && (backFace.small || backFace.normal)) || '',
         setCode: (c.set || '').toUpperCase(),
         rarity: c.rarity || '',
         typeLine: c.printed_type_line || c.type_line || '',

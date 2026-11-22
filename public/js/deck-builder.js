@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
 import { createCatalogSearch, resultItem } from './catalog-search.js';
+import { initCardPreview } from './card-viewer.js';
+import { markPreviewable } from './ui.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, debounce } from './ui.js';
 
@@ -153,7 +155,7 @@ function renderZones() {
           el(
             'div',
             { class: 'deck-row' },
-            el('span', {}, card.name, langBadge(card.language)),
+            markPreviewable(el('span', { class: 'deck-name' }, card.name, langBadge(card.language)), card),
             el(
               'span',
               { class: 'qty' },
@@ -204,6 +206,7 @@ function addCardToDeck(card, zoneOverride) {
       cardId: card.cardId,
       name: card.name,
       imageUrl: card.imageUrl || '',
+      imageBack: card.imageBack || '',
       language: card.language || catalogLang,
       quantity: 1,
       zone,
@@ -401,4 +404,5 @@ async function init() {
   setSource('collection');
 }
 
+initCardPreview();
 init();

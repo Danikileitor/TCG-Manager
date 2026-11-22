@@ -848,3 +848,143 @@
   opacity: 0.4;
   pointer-events: none;
 }
+
+/* ===== Vista ampliada de cartas ===== */
+.previewable { cursor: zoom-in; }
+
+.card-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 3000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+}
+.card-tip.show { opacity: 1; }
+.card-tip img {
+  display: block;
+  width: 340px;
+  max-width: 42vw;
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #0b0f1a;
+}
+
+.card-viewer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #e8edf7;
+  overflow: hidden;
+}
+.card-viewer::backdrop {
+  background: rgba(5, 8, 14, 0.74);
+  backdrop-filter: blur(2px);
+}
+.card-viewer[open] { animation: cv-in 0.18s ease; }
+@keyframes cv-in { from { opacity: 0; } to { opacity: 1; } }
+
+.cv-stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: grab;
+  perspective: 1400px;
+  user-select: none;
+}
+.cv-stage.dragging { cursor: grabbing; }
+.cv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.cv-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(to bottom, rgba(5, 8, 14, 0.75), transparent);
+  pointer-events: none;
+}
+.cv-bar > * { pointer-events: auto; }
+.cv-heading { display: flex; flex-direction: column; min-width: 0; }
+.cv-title { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-note { font-size: 0.78rem; opacity: 0.7; }
+.cv-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.cv-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(20, 27, 44, 0.85);
+  color: inherit;
+  cursor: pointer;
+}
+.cv-btn:hover { background: rgba(40, 52, 82, 0.95); }
+.cv-btn:focus-visible { outline: 2px solid #f0b44a; outline-offset: 2px; }
+
+.cv-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.cv-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+.cv-status.hidden { display: none; }
+
+/* Alternativa CSS 3D */
+.cv-css-holder { position: absolute; inset: 0; display: grid; place-items: center; perspective: 1400px; pointer-events: none; }
+.cv-css-card {
+  position: relative;
+  height: min(78vh, 112vw);
+  aspect-ratio: 63 / 88;
+  transform-style: preserve-3d;
+}
+.cv-css-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4.5%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+.cv-css-back { transform: rotateY(180deg); }
+
+@media (max-width: 560px) {
+  .cv-hint { font-size: 0.7rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-viewer[open] { animation: none; }
+  .card-tip { transition: none; }
+}

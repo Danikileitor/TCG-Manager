@@ -24,7 +24,7 @@ tcg-manager/
 │   ├── privacy.html             # política de privacidad
 │   ├── terms.html               # condiciones del servicio
 │   ├── css/  base.css · login.css · home.css · app.css · legal.css
-│   ├── js/   api.js · ui.js · session.js · auth.js · home.js
+│   ├── js/   api.js · ui.js · card-images.js · card-viewer.js · session.js · auth.js · home.js
 │   │         collection.js · deck-builder.js · card-providers.js · catalog-search.js
 │   │         games-cache.js · language.js
 │   ├── data/ygo/                # datos de Yu-Gi-Oh! (nombres por idioma, filtros, sets, artes alt.), generados
@@ -154,6 +154,13 @@ Artes alternativos: en Magic se usa `unique=art` de Scryfall (una carta por ilus
 **Digimon:** la [API de digimoncard.io](https://digimoncard.io/api-documentation) admite llamadas desde cualquier dominio, pero limita a 15 peticiones cada 10 segundos por IP, por eso el navegador de cada usuario la llama directamente (con una caché de 5 minutos en memoria). Si el navegador no puede (bloqueador, red, etc.), usa como plan B la función `netlify/functions/digimon-search.js`. La API no tiene filtro de rareza ni de artes alternativos: se aplican en local sobre la respuesta, por eso la rareza necesita ir con otro criterio (nombre, color…). Sin resultados, la API responde HTTP 400 y la web lo muestra como "Sin resultados".
 
 En el constructor de mazos, los filtros solo están en la pestaña **Catálogo**; "Mi colección" sigue buscando por nombre.
+
+### Vista ampliada de las cartas
+
+- **Tooltip:** al pasar el ratón sobre una carta (colección, resultados del catálogo y mazo) aparece en grande para leer el texto. Solo en dispositivos con ratón.
+- **Vista 3D:** al hacer clic se abre un popup con el fondo oscurecido y la carta en un `<canvas>` WebGL. Arrastra para girarla en horizontal, rueda o pellizco para zoom, Mayús + arrastrar para moverla, botón o tecla `F` para darle la vuelta, `0` o doble clic para restablecer, `Esc` para cerrar.
+- **Dorso:** las cartas de dos caras de MTG guardan `imageBack` (colección y mazos). Las demás muestran un dorso genérico. Las cartas de dos caras guardadas antes de esta versión no lo tienen hasta que se vuelvan a añadir.
+- **CORS:** WebGL solo puede usar imágenes de servidores que lo permitan (Scryfall y YGOPRODeck lo hacen). Si no, o si el navegador no tiene WebGL, se usa automáticamente una vista equivalente con CSS 3D.
 
 ### Yu-Gi-Oh!: índice de YGOJSON
 

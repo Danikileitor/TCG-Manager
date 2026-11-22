@@ -11,7 +11,7 @@
 // Todo el DOM se construye con textContent (nunca innerHTML con datos externos).
 import { getFilterSchema, getAltArtsInfo } from './card-providers.js';
 import { langShort } from './language.js';
-import { el, clear, toast } from './ui.js';
+import { el, clear, toast, markPreviewable } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -284,7 +284,7 @@ export function langBadge(code) {
 // Fila de un resultado del catálogo; `action` es el botón de la derecha
 export function resultItem(card, action) {
   let thumb = card.imageUrl
-    ? el('img', { src: card.imageUrl, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' })
+    ? markPreviewable(el('img', { src: card.imageUrl, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' }), card)
     : el('div', { class: 'ph' });
   // Si la imagen no carga (enlace roto), se muestra el hueco gris en su lugar
   if (thumb.tagName === 'IMG') {

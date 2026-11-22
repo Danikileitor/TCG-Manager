@@ -60,11 +60,23 @@ export function safeImageUrl(url) {
   }
 }
 
+// Marca un elemento para que, al pasar el ratón, se vea la carta en grande (tooltip) y, al
+// hacer clic, se abra la vista 3D (card-viewer.js, que escucha estos atributos).
+export function markPreviewable(node, card) {
+  const image = safeImageUrl(card.imageUrl);
+  if (!image) return node;
+  node.classList.add('previewable');
+  node.dataset.cardName = card.name || '';
+  node.dataset.cardImage = image;
+  node.dataset.cardBack = safeImageUrl(card.imageBack) || '';
+  return node;
+}
+
 export function cardThumb(card) {
   const src = safeImageUrl(card.imageUrl);
   const box = el('div', { class: 'thumb' });
   if (src) {
-    box.append(el('img', { src, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' }));
+    box.append(markPreviewable(el('img', { src, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' }), card));
   } else {
     box.textContent = card.name;
   }
