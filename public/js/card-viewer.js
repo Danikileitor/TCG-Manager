@@ -125,7 +125,7 @@ function enhanceImage(img) {
   try {
     const w = img.naturalWidth;
     const h = img.naturalHeight;
-    if (!w || h >= 1000) return img;
+    if (!w || h >= 900) return img;
     const k = h < 700 ? 2 : 1.5;
     const out = document.createElement('canvas');
     out.width = Math.round(w * k);
@@ -139,12 +139,12 @@ function enhanceImage(img) {
     blurred.width = out.width;
     blurred.height = out.height;
     const bg = blurred.getContext('2d', { willReadFrequently: true });
-    bg.filter = 'blur(1.4px)';
+    bg.filter = 'blur(1.2px)';
     bg.drawImage(out, 0, 0);
     const a = g.getImageData(0, 0, out.width, out.height);
     const b = bg.getImageData(0, 0, out.width, out.height).data;
     const d = a.data;
-    const amount = 0.9;
+    const amount = 0.6;
     for (let i = 0; i < d.length; i += 4) {
       d[i] = Math.max(0, Math.min(255, d[i] + (d[i] - b[i]) * amount));
       d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + (d[i + 1] - b[i + 1]) * amount));

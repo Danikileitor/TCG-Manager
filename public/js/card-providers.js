@@ -23,6 +23,7 @@
 //     'combo'   loadOptions() -> [{value,label}] (se carga al abrir los filtros)
 //   Los grupos son { title, fields: [...] }.
 
+import { betterImageUrl } from './card-images.js';
 import { api } from './api.js';
 
 const PAGE_SIZE = 40;
@@ -1084,7 +1085,7 @@ const digimon = {
         cardId: String(id),
         name: c.name,
         altName: '',
-        imageUrl: c.image_url || (id ? `${DIGIMON_ALT_IMG}${id}.webp` : ''), // mayor resolución que la de digimoncard.io
+        imageUrl: betterImageUrl(c.image_url) || (id ? `${DIGIMON_ALT_IMG}${id}.webp` : ''), // mismo origen (mayor resolución) en lista, tooltip y visor
         setCode: Array.isArray(c.set_name) ? c.set_name[0] || '' : c.set_name || '',
         rarity: c.card_rarity || c.rarity || '',
         typeLine: type,
