@@ -153,6 +153,7 @@ let catalogSearch = null;
 function buildCatalogSearch() {
   catalogSearch = createCatalogSearch({
     gameKey: game.key,
+    getLang: () => catalogLang,
     mount: document.getElementById('catalog-search'),
     resultList,
     idleMessage: 'Busca una carta por nombre o usa los filtros para añadirla a tu colección.',

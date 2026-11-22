@@ -137,6 +137,10 @@ Los idiomas de cada TCG se declaran en `public/js/card-providers.js` (`languages
 
 El buscador de cartas (`public/js/catalog-search.js`, usado en la colección y en el constructor de mazos) tiene un botón **Filtros** que abre un panel lateral, las etiquetas de los filtros activos (se quitan una a una) y la casilla **Incluir artes alternativos** (desactivada por defecto). Se puede buscar solo con filtros, sin escribir un nombre, y los resultados se cargan por páginas ("Cargar más resultados").
 
+Los filtros numéricos (coste, nivel, ATK…) piden un valor fijo; marcando la casilla **Rango** junto al filtro se cambian por un mínimo y un máximo.
+
+En Magic, el campo **Subtipo o supertipo** sugiere los tipos en el idioma de las cartas elegido (y se puede escribir lo que se quiera). Scryfall no publica traducciones de los tipos, así que se aprenden de las propias cartas: cada una trae su línea de tipo en inglés y la impresa en su idioma, y se emparejan solo cuando es seguro. La primera vez que se usa un idioma se descargan 8 páginas de cartas de Scryfall (unos segundos, en segundo plano) y el resultado se guarda una semana en el navegador (`localStorage`, clave `tcg.mtgtypes.v1.<idioma>`). En inglés se usan los catálogos oficiales de Scryfall. Al buscar, cada tipo conocido se envía en inglés y en el idioma elegido.
+
 Cada TCG declara sus filtros en `public/js/card-providers.js` (`filters` de cada proveedor); el panel se dibuja solo a partir de esa lista:
 
 | TCG | Filtros |

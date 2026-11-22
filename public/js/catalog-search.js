@@ -81,19 +81,59 @@ function makeChips(field) {
   };
 }
 
+// Valor fijo por defecto; con la casilla "Rango" se pueden indicar mínimo y máximo.
+// El valor devuelto siempre es { min, max } (en valor fijo, min y max son iguales).
 function makeRange(field) {
-  const minId = nextId('f');
-  const maxId = nextId('f');
   const attrs = { type: 'number', inputmode: 'numeric', min: field.min, max: field.max, step: field.step || 1 };
-  const min = el('input', { ...attrs, id: minId, placeholder: 'Mín.', 'aria-label': `${field.label}: mínimo` });
-  const max = el('input', { ...attrs, id: maxId, placeholder: 'Máx.', 'aria-label': `${field.label}: máximo` });
-  const row = el('div', { class: 'cs-range' }, min, el('span', { class: 'cs-range-sep', text: '–', 'aria-hidden': 'true' }), max);
+  const single = el('input', { ...attrs, id: nextId('f'), placeholder: field.placeholder || 'Valor', 'aria-label': field.label });
+  const min = el('input', { ...attrs, placeholder: 'Mín.', 'aria-label': `${field.label}: mínimo` });
+  const max = el('input', { ...attrs, placeholder: 'Máx.', 'aria-label': `${field.label}: máximo` });
+  const toggle = el('input', { type: 'checkbox' });
+  const toggleLabel = el(
+    'label',
+    { class: 'check check-sm', title: 'Buscar entre un mínimo y un máximo' },
+    toggle,
+    el('span', { class: 'check-box' }, checkIcon()),
+    el('span', { class: 'check-text' }, el('strong', { text: 'Rango' }))
+  );
+  const rangeRow = el('div', { class: 'cs-range hidden' }, min, el('span', { class: 'cs-range-sep', text: '–', 'aria-hidden': 'true' }), max);
+  const row = el('div', { class: 'cs-range-line' }, single, rangeRow, toggleLabel);
+
+  function setMode(isRange, carry = true) {
+    if (carry && isRange !== !rangeRow.classList.contains('hidden')) {
+      // Al cambiar de modo se conserva lo escrito
+      if (isRange) {
+        min.value = single.value;
+        max.value = single.value;
+      } else {
+        single.value = min.value !== '' ? min.value : max.value;
+      }
+    }
+    toggle.checked = isRange;
+    single.classList.toggle('hidden', isRange);
+    rangeRow.classList.toggle('hidden', !isRange);
+  }
+  toggle.addEventListener('change', () => setMode(toggle.checked));
+
   return {
-    node: fieldWrap(field, row),
-    read: () => ({ min: min.value, max: max.value }),
+    node: fieldWrap(field, row, single.id),
+    read: () => (toggle.checked ? { min: min.value, max: max.value } : { min: single.value, max: single.value }),
     write: (v) => {
-      min.value = (v && v.min) ?? '';
-      max.value = (v && v.max) ?? '';
+      const lo = String((v && v.min) ?? '');
+      const hi = String((v && v.max) ?? '');
+      if (lo !== '' && lo === hi) {
+        setMode(false, false);
+        single.value = lo;
+        min.value = max.value = '';
+      } else if (lo !== '' || hi !== '') {
+        setMode(true, false);
+        min.value = lo;
+        max.value = hi;
+        single.value = '';
+      } else {
+        setMode(false, false);
+        single.value = min.value = max.value = '';
+      }
     },
   };
 }
@@ -104,16 +144,39 @@ function makeNumber(field) {
   return { node: fieldWrap(field, input, id), read: () => input.value, write: (v) => (input.value = v ?? '') };
 }
 
-function makeText(field) {
+// Texto libre. Con `field.suggest(texto, idioma)` se ofrecen sugerencias mientras se escribe
+// (lista desplegable): se puede seguir escribiendo lo que se quiera.
+function makeText(field, ctx) {
   const id = nextId('f');
   const input = el('input', { id, type: 'text', maxlength: 80, autocomplete: 'off', placeholder: field.placeholder || '' });
   const wrap = fieldWrap(field, input, id);
-  if (field.suggestions) {
-    const listId = nextId('dl');
+  const listId = nextId('dl');
+  const list = el('datalist', { id: listId });
+  if (field.suggestions || field.suggest) {
     input.setAttribute('list', listId);
-    const list = el('datalist', { id: listId });
-    field.suggestions.forEach((s) => list.append(el('option', { value: s })));
     wrap.append(list);
+  }
+  const setOptions = (values) => {
+    const frag = document.createDocumentFragment();
+    values.forEach((v) => frag.append(el('option', { value: v })));
+    list.replaceChildren(frag);
+  };
+  if (field.suggestions) setOptions(field.suggestions);
+
+  if (field.suggest) {
+    let timer = null;
+    let seq = 0;
+    const refresh = () => {
+      const mine = ++seq;
+      Promise.resolve(field.suggest(input.value, ctx.getLang(), refresh))
+        .then((values) => mine === seq && setOptions(values || []))
+        .catch(() => {});
+    };
+    input.addEventListener('focus', refresh);
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 120);
+    });
   }
   return { node: wrap, read: () => input.value.trim(), write: (v) => (input.value = v ?? '') };
 }
@@ -230,9 +293,11 @@ export function resultItem(card, action) {
  * @param {HTMLElement} cfg.resultList   donde se dibujan los resultados
  * @param {(req) => Promise<{cards, hasMore, total}>} cfg.search  req = { query, filters, altArts, page }
  * @param {(card) => HTMLElement} cfg.renderAction  botón de cada resultado
+ * @param {() => string} [cfg.getLang]  idioma de las cartas elegido (para las sugerencias)
  * @param {string} [cfg.idleMessage]
  */
-export function createCatalogSearch({ gameKey, mount, resultList, search, renderAction, idleMessage = 'Busca una carta para añadirla.' }) {
+export function createCatalogSearch({ gameKey, mount, resultList, search, renderAction, getLang = () => 'en', idleMessage = 'Busca una carta para añadirla.' }) {
+  const ctx = { getLang };
   const schema = getFilterSchema(gameKey);
   const fields = schema.flatMap((g) => g.fields);
   const altInfo = getAltArtsInfo(gameKey);
@@ -269,7 +334,7 @@ export function createCatalogSearch({ gameKey, mount, resultList, search, render
   schema.forEach((group) => {
     const fieldset = el('fieldset', { class: 'cs-group' }, el('legend', { text: group.title }));
     group.fields.forEach((f) => {
-      const control = MAKERS[f.type](f);
+      const control = MAKERS[f.type](f, ctx);
       controls.set(f.id, control);
       fieldset.append(control.node);
     });
@@ -398,7 +463,7 @@ export function createCatalogSearch({ gameKey, mount, resultList, search, render
     if (old) old.remove();
 
     if (!append && res.cards.length === 0) {
-      showMessage('Sin resultados. Prueba con menos filtros o con otra búsqueda.');
+      showMessage(res.emptyNote || 'Sin resultados. Prueba con menos filtros o con otra búsqueda.');
       return;
     }
     if (!append) {

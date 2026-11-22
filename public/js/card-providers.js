@@ -151,8 +151,8 @@ const MTG_FILTERS = [
           { value: 'battle', label: 'Batalla' },
         ],
       },
-      { id: 'subtype', label: 'Subtipo o supertipo', type: 'text', placeholder: 'Ej.: legendary, elf, equipment', hint: 'En inglés, como aparece en la carta original.' },
-      { id: 'oracle', label: 'Texto de reglas', type: 'text', placeholder: 'Ej.: draw a card', hint: 'En inglés (texto oracle).' },
+      { id: 'subtype', label: 'Subtipo o supertipo', type: 'text', placeholder: 'Escribe o elige de la lista', suggest: suggestMtgTypes },
+      { id: 'oracle', label: 'Texto de reglas', type: 'text', placeholder: 'Palabras que debe contener el texto' },
     ],
   },
   {
@@ -252,14 +252,182 @@ function mtgPrintedName(c) {
   return c.name;
 }
 
+// ---- Subtipos y supertipos en el idioma elegido ----
+// Scryfall no ofrece traducciones de los tipos. Se aprenden de las propias cartas: cada carta
+// trae su línea de tipo oficial en inglés ("Legendary Creature — Elf Warrior") y la impresa en
+// su idioma ("Criatura legendaria — Elfo guerrero"); emparejándolas se obtiene la lista de
+// palabras de ese idioma y su equivalente en inglés. Se descarga una muestra de cartas la
+// primera vez que se usa un idioma y se guarda una semana en el navegador.
+const MTG_TYPES_KEY = 'tcg.mtgtypes.v1.';
+const MTG_TYPES_TTL = 7 * 24 * 3600 * 1000;
+const MTG_CRAWL_PLAN = [['edhrec', 1], ['edhrec', 2], ['edhrec', 3], ['released', 1], ['released', 2], ['power', 1], ['toughness', 1], ['cmc', 1]];
+const MTG_CATALOGS = ['supertypes', 'card-types', 'creature-types', 'planeswalker-types', 'land-types', 'artifact-types', 'enchantment-types', 'spell-types', 'battle-types'];
+const mtgTypeStates = new Map(); // idioma -> { words: Map(norm -> texto), dict: Map(norm -> inglés), loading }
+
+const isCjk = (text) => /[぀-ヿ㐀-鿿가-힯]/.test(text);
+
+function newTypeState() {
+  return { words: new Map(), dict: new Map(), loading: null };
+}
+
+function addTypeWord(state, word) {
+  const clean = String(word).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  if (!clean || clean.length < (isCjk(clean) ? 1 : 3) || /^\d+$/.test(clean)) return null;
+  const key = normalizeText(clean);
+  if (!state.words.has(key)) state.words.set(key, clean.charAt(0).toLocaleUpperCase() + clean.slice(1));
+  return key;
+}
+
+function splitTypeLine(line) {
+  if (!line || line.includes('//')) return null; // cartas de dos caras: se ignoran
+  const [before, after = ''] = String(line).split(/\s*—\s*/);
+  const tokens = (side) => side.split(/[\s・·]+/).filter(Boolean);
+  return { before: tokens(before), after: tokens(after) };
+}
+
+// Aprende palabras y equivalencias de las cartas devueltas por Scryfall.
+// Solo se empareja cuando es seguro: palabra única en ambas líneas, o por eliminación
+// (el resto de palabras ya se conocen). No se adivina por posición, porque el orden de las
+// palabras cambia según el idioma.
+export function learnMtgTypes(state, cards) {
+  const pending = [];
+  const clean = (w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  for (const c of cards) {
+    const en = splitTypeLine(c.type_line);
+    const loc = splitTypeLine(c.printed_type_line);
+    if (!loc) continue;
+    [...loc.before, ...loc.after].forEach((w) => addTypeWord(state, w));
+    if (!en) continue;
+    for (const side of ['before', 'after']) {
+      if (en[side].length !== loc[side].length || en[side].length === 0) continue;
+      if (en[side].length === 1) {
+        const key = normalizeText(clean(loc[side][0]));
+        if (key && state.words.has(key) && !state.dict.has(key)) state.dict.set(key, clean(en[side][0]));
+      } else {
+        pending.push({ en: en[side].map(clean), loc: loc[side].map((w) => normalizeText(clean(w))) });
+      }
+    }
+  }
+  for (let pass = 0; pass < 4; pass++) {
+    for (const item of pending) {
+      const known = new Set();
+      const unknownLoc = [];
+      item.loc.forEach((key) => {
+        if (state.dict.has(key)) known.add(normalizeText(state.dict.get(key)));
+        else unknownLoc.push(key);
+      });
+      const unknownEn = item.en.filter((w) => !known.has(normalizeText(w)));
+      if (unknownLoc.length === 1 && unknownEn.length === 1 && state.words.has(unknownLoc[0])) {
+        state.dict.set(unknownLoc[0], unknownEn[0]);
+      }
+    }
+  }
+}
+
+function readTypeCache(lang) {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(MTG_TYPES_KEY + lang));
+    if (saved && Date.now() - saved.at < MTG_TYPES_TTL) return saved;
+  } catch (err) {
+    // sin almacenamiento
+  }
+  return null;
+}
+
+function saveTypeCache(lang, state) {
+  try {
+    window.localStorage.setItem(
+      MTG_TYPES_KEY + lang,
+      JSON.stringify({ at: Date.now(), words: [...state.words.values()], dict: [...state.dict.entries()] })
+    );
+  } catch (err) {
+    // sin almacenamiento
+  }
+}
+
+async function crawlMtgTypes(lang, state, onUpdate) {
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let got = false;
+  if (lang === 'en') {
+    // En inglés, Scryfall publica las listas completas
+    for (const name of MTG_CATALOGS) {
+      try {
+        const { data } = await fetchJson(`https://api.scryfall.com/catalog/${name}`);
+        ((data && data.data) || []).forEach((w) => addTypeWord(state, w));
+        got = true;
+        onUpdate();
+      } catch (err) {
+        break;
+      }
+      await pause(100);
+    }
+  } else {
+    for (const [order, page] of MTG_CRAWL_PLAN) {
+      try {
+        const url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(`lang:${lang}`)}&unique=cards&order=${order}&dir=desc&page=${page}`;
+        const { data } = await fetchJson(url);
+        if (data && data.data) {
+          learnMtgTypes(state, data.data);
+          got = true;
+          onUpdate();
+        }
+      } catch (err) {
+        break; // límite de peticiones o sin conexión: se queda con lo aprendido
+      }
+      await pause(100);
+    }
+  }
+  if (got) saveTypeCache(lang, state);
+}
+
+// Estado de los tipos de un idioma: lo guardado en el navegador o, si no hay, lo empieza a descargar
+export function ensureMtgTypes(lang, onUpdate = () => {}) {
+  let state = mtgTypeStates.get(lang);
+  if (!state) {
+    state = newTypeState();
+    mtgTypeStates.set(lang, state);
+    const cached = readTypeCache(lang);
+    if (cached) {
+      cached.words.forEach((w) => addTypeWord(state, w));
+      state.dict = new Map(cached.dict);
+    } else {
+      state.loading = crawlMtgTypes(lang, state, onUpdate).finally(() => {
+        state.loading = null;
+        onUpdate();
+      });
+    }
+  }
+  return state;
+}
+
+// Sugerencias para el campo de subtipo: la última palabra escrita se completa con los tipos del idioma
+export function suggestMtgTypes(text, lang, onUpdate) {
+  const state = ensureMtgTypes(lang, onUpdate);
+  const match = /^(.*\s)?(\S*)$/.exec(text || '');
+  const prefix = (match && match[1]) || '';
+  const start = normalizeText((match && match[2]) || '');
+  return [...state.words.entries()]
+    .filter(([key]) => key.startsWith(start))
+    .map(([, shown]) => shown)
+    .sort((a, b) => a.localeCompare(b, lang === 'zhs' || lang === 'zht' ? 'zh' : lang))
+    .slice(0, 80)
+    .map((shown) => prefix + shown);
+}
+
 // Convierte los filtros en términos de la sintaxis de búsqueda de Scryfall
 // (https://scryfall.com/docs/syntax)
-export function buildScryfallQuery(query, lang, filters = {}) {
+export function buildScryfallQuery(query, lang, filters = {}, typeDict = null) {
   const terms = [];
   if (hasText(query)) terms.push(query.trim());
 
   if (hasText(filters.cardType)) terms.push(`t:${filters.cardType}`);
-  words(filters.subtype).forEach((w) => terms.push(`t:${w.replace(/[^\p{L}\p{N}'-]/gu, '')}`));
+  words(filters.subtype).forEach((w) => {
+    const clean = w.replace(/[^\p{L}\p{N}'-]/gu, '');
+    if (!clean) return;
+    // Si se conoce el equivalente en inglés del tipo escrito en otro idioma, se buscan ambos
+    const english = typeDict && typeDict.get(normalizeText(clean));
+    terms.push(english && normalizeText(english) !== normalizeText(clean) ? `(t:${english} or t:${clean})` : `t:${clean}`);
+  });
   if (hasText(filters.oracle)) terms.push(`o:"${filters.oracle.trim().replace(/"/g, '')}"`);
 
   const colors = Array.isArray(filters.colors) ? filters.colors : [];
@@ -296,7 +464,7 @@ const scryfall = {
   altArtsLabel: 'Incluir artes alternativos',
   altArtsHint: 'Muestra una carta por cada ilustración distinta.',
   async search(query, lang, { filters = {}, altArts = false, page = 1 } = {}) {
-    const q = buildScryfallQuery(query, lang, filters);
+    const q = buildScryfallQuery(query, lang, filters, hasText(filters.subtype) ? ensureMtgTypes(lang).dict : null);
     // unique=art: una carta por ilustración (incluye artes alternativos); unique=cards: una por carta
     const url =
       `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}` +
@@ -309,7 +477,13 @@ const scryfall = {
       throw err;
     }
     const data = result.data;
-    if (!data || !data.data) return { cards: [], hasMore: false, total: 0 };
+    if (!data || !data.data) {
+      const emptyNote =
+        lang !== 'en' && hasText(filters.oracle)
+          ? 'Sin resultados. Scryfall puede buscar el texto de reglas solo en el original en inglés: prueba también a quitar el texto de reglas.'
+          : '';
+      return { cards: [], hasMore: false, total: 0, emptyNote };
+    }
     const cards = data.data.map((c) => {
       const face = c.image_uris || (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris) || {};
       const name = mtgPrintedName(c);
