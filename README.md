@@ -165,6 +165,15 @@ En el constructor de mazos, los filtros solo están en la pestaña **Catálogo**
 
 **Artes alternativos de Digimon:** `scripts/build-digimon-arts.mjs` genera `public/data/digimon/arts.json` (≈80 KB, 4.400 artes de ≈2.700 cartas) a partir de los datos de artes del proyecto [Aegis](https://github.com/vinicius3333/aegis-digimon-tcg) (licencia MIT), que a su vez los toma de [Digimon-Card-App](https://github.com/TakaOtaku/Digimon-Card-App). Con la casilla activada, tras cada carta se añaden sus `<carta>_P1`, `_P2`… con el pack o evento de cada una. Las imágenes se piden al servidor de la comunidad `web-garage.takaotaku.de/<carta>_P<n>.webp` y, si falla, a la lista oficial de Bandai. Para actualizar los datos cuando salgan sets nuevos: `node scripts/build-digimon-arts.mjs`.
 
+### Filtros de "Mi colección"
+
+En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), un selector de orden (nombre, añadidas recientemente, copias, coste/nivel, edición) y un botón **Filtros** con un panel lateral como el del catálogo. Todo se filtra en el navegador. Las opciones salen de lo que tienes: solo se ofrecen los colores, tipos, ediciones, rarezas, estados, acabados e idiomas que existan en tu colección.
+
+- **Datos de la carta:** color (con "cualquiera / todos / solo esos"), tipo (se deben tener todos los elegidos), atributo, subtipo/raza/rasgo (con sugerencias), y valores numéricos (fijo o rango): coste de maná y fuerza en MTG, nivel/rango/enlace y ATK en Yu-Gi-Oh!, coste de jugada, nivel y DP en Digimon.
+- **En mi colección:** idioma, edición, rareza, estado, acabado y número de copias.
+- **Cómo se guardan:** cada carta lleva un objeto `facets` (`colors`, `types`, `subtypes`, `attribute`, `cost`, `level`, `power`) que `netlify/functions/collection.js` valida y guarda. MTG y Digimon lo reciben al añadir la carta desde el catálogo; Yu-Gi-Oh! lo calcula con los archivos locales. Las cartas guardadas antes de esta versión se completan solas la primera vez que abres la colección (MTG: una petición a Scryfall por cada 75 cartas; Yu-Gi-Oh!: en local; Digimon: una consulta por carta, con pausas por el límite de la API) y se guardan con `PUT /api/collection` `{ items: [{ id, facets }] }`. Mientras tanto, esas cartas no aparecen al filtrar por datos de la carta.
+- El listado de la colección carga hasta 5.000 cartas por juego.
+
 ### Yu-Gi-Oh!: índice de YGOJSON
 
 [YGOJSON](https://github.com/iconmaster5326/YGOJSON) no es una API de búsqueda, sino miles de cartas en archivos JSON (el agregado pesa ~110 MB). Por eso el script `scripts/build-ygo-index.mjs` genera un índice mínimo por idioma en `public/data/ygo/` (id, nombre oficial, nombre en inglés, tipo e imagen). El navegador descarga solo el del idioma elegido, la primera vez que se busca (~1 MB sin comprimir, ~0,3 MB comprimido; Netlify lo comprime y `netlify.toml` lo cachea), y busca en local sin más peticiones. Los demás archivos solo se descargan si se usan: `details.json` (atributo, tipo, nivel, ATK/DEF…) al aplicar filtros, `sets.json` y `cardsets.json` al filtrar por set, y `arts.json` al activar los artes alternativos.

@@ -30,11 +30,12 @@
         <h2>Mis cartas</h2>
         <div id="stats" class="stats"></div>
         <div class="toolbar">
-          <input id="filter-input" type="search" placeholder="Filtrar mi colección por nombre…">
-          <select id="filter-lang" aria-label="Filtrar por idioma">
-            <option value="">Todos los idiomas</option>
-          </select>
+          <input id="filter-input" type="search" placeholder="Buscar en mi colección…" aria-label="Buscar en mi colección">
+          <select id="sort-select" aria-label="Ordenar"></select>
+          <span id="filters-mount"></span>
         </div>
+        <div id="filters-active"></div>
+        <div id="enrich-status" class="muted enrich-status hidden" role="status"></div>
         <div id="collection-grid" class="card-grid"><div class="spinner"></div></div>
       </section>
 

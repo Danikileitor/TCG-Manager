@@ -11,6 +11,26 @@ function str(value, max = 200) {
   return String(value ?? '').trim().slice(0, max);
 }
 
+// Datos para filtrar la colección (ver facets en card-providers.js): solo se guardan estos campos y con límites
+function num(v) {
+  return v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.max(-999999, Math.min(9999999, Number(v)));
+}
+function strList(v, maxItems = 12) {
+  return Array.isArray(v) ? [...new Set(v.map((x) => str(x, 40)).filter(Boolean))].slice(0, maxItems) : [];
+}
+function sanitizeFacets(f) {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
+  return {
+    colors: strList(f.colors, 6),
+    types: strList(f.types, 12),
+    subtypes: strList(f.subtypes, 16),
+    attribute: str(f.attribute, 40),
+    cost: num(f.cost),
+    level: num(f.level),
+    power: num(f.power),
+  };
+}
+
 exports.handler = async (event) => {
   const user = getUserFromRequest(event);
   if (!user) return json(401, { error: 'No autorizado' });
@@ -32,7 +52,7 @@ exports.handler = async (event) => {
       if (qs.q) {
         filter.name = { $regex: escapeRegex(str(qs.q, 60)), $options: 'i' };
       }
-      const cards = await col.find(filter).sort({ name: 1 }).limit(1000).toArray();
+      const cards = await col.find(filter).sort({ name: 1 }).limit(5000).toArray();
       return json(200, { cards });
     }
 
@@ -74,6 +94,7 @@ exports.handler = async (event) => {
             setCode: str(body.setCode, 30),
             rarity: str(body.rarity, 50),
             notes: str(body.notes, 500),
+            ...(sanitizeFacets(body.facets) ? { facets: sanitizeFacets(body.facets) } : {}),
             updatedAt: now,
           },
           $setOnInsert: { acquiredAt: now },
@@ -87,6 +108,17 @@ exports.handler = async (event) => {
     // ---------- ACTUALIZAR cantidad / notas ----------
     if (method === 'PUT') {
       const body = parseBody(event);
+
+      // Completar datos de filtrado de varias cartas a la vez: { items: [{ id, facets }] }
+      if (body && Array.isArray(body.items)) {
+        const ops = body.items
+          .slice(0, 500)
+          .filter((it) => it && ObjectId.isValid(it.id) && sanitizeFacets(it.facets))
+          .map((it) => ({ updateOne: { filter: { _id: new ObjectId(it.id), userId: user.id }, update: { $set: { facets: sanitizeFacets(it.facets) } } } }));
+        if (ops.length) await col.bulkWrite(ops, { ordered: false });
+        return json(200, { updated: ops.length });
+      }
+
       if (!body || !ObjectId.isValid(body.id)) return json(400, { error: 'ID no válido' });
 
       const update = { updatedAt: new Date() };

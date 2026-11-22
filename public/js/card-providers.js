@@ -498,6 +498,7 @@ const scryfall = {
         setCode: (c.set || '').toUpperCase(),
         rarity: c.rarity || '',
         typeLine: c.printed_type_line || c.type_line || '',
+        facets: mtgFacets(c),
         statLine: [c.mana_cost, pt].filter(Boolean).join(' · '),
         zoneHint: 'main',
         language: c.lang || lang,
@@ -791,6 +792,7 @@ const ygojson = {
         setCode: '',
         rarity: '',
         typeLine: kind.label,
+        facets: details ? ygoFacets(row[3], details[row[0]]) : null,
         statLine: ygoStatLine(details && details[row[0]]),
         zoneHint: kind.zone,
         language: lang,
@@ -1071,6 +1073,7 @@ const digimon = {
         setCode: Array.isArray(c.set_name) ? c.set_name[0] || '' : c.set_name || '',
         rarity: c.card_rarity || c.rarity || '',
         typeLine: type,
+        facets: digimonFacets(c),
         statLine: digimonLine(c),
         zoneHint: /egg/i.test(type) ? 'digi-egg' : 'main',
         backKind: /egg/i.test(type) ? 'egg' : '', // los Digi-Egg tienen un dorso distinto
@@ -1087,6 +1090,139 @@ const providers = { mtg: scryfall, ygo: ygojson, digimon };
 const FALLBACK_LANGUAGES = [{ code: 'en', label: 'English' }];
 
 // Idiomas que ofrece el catálogo de un TCG: [{ code, label }]
+
+// ====================================================================
+// Datos para filtrar "Mi colección" (facets)
+// ====================================================================
+// Cada carta guardada lleva un objeto pequeño con lo necesario para filtrar sin consultar el catálogo:
+//   { colors: [], types: [], subtypes: [], attribute: '', cost: n, level: n, power: n }
+// Los de MTG y Digimon vienen ya en los resultados de búsqueda; los de Yu-Gi-Oh! salen de los archivos locales.
+// Para las cartas guardadas antes de existir esto, facetsForCards() los consulta una vez.
+const cleanNum = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+
+export function mtgFacets(c) {
+  const faces = Array.isArray(c.card_faces) ? c.card_faces : [];
+  const colors = [...new Set([...(c.colors || []), ...(c.colors ? [] : faces.flatMap((f) => f.colors || []))])];
+  if (!colors.length) colors.push('C');
+  const types = new Set();
+  const subtypes = new Set();
+  for (const part of String(c.type_line || '').split('//')) {
+    const [left, right] = part.split('—');
+    left.trim().split(/\s+/).filter(Boolean).forEach((t) => types.add(t));
+    (right || '').trim().split(/\s+/).filter(Boolean).forEach((t) => subtypes.add(t));
+  }
+  return { colors, types: [...types], subtypes: [...subtypes], cost: cleanNum(c.cmc), power: cleanNum(c.power !== undefined ? c.power : faces[0] && faces[0].power) };
+}
+
+export function digimonFacets(c) {
+  const type = c.type || c.card_type || '';
+  return {
+    colors: [c.color, c.color2].filter(Boolean),
+    types: type ? [type] : [],
+    subtypes: [c.digi_type, c.digi_type2, c.digi_type3, c.digi_type4, c.digi_type5, c.form].filter(Boolean),
+    attribute: c.attribute || '',
+    cost: cleanNum(c.play_cost),
+    level: cleanNum(c.level),
+    power: cleanNum(c.dp),
+  };
+}
+
+const YGO_SUB_LABELS = { normal: 'Normal', continuous: 'Continua', equip: 'Equipo', quickplay: 'Juego rápido', field: 'Campo', ritual: 'Ritual', counter: 'Contraefecto' };
+
+export function ygoFacets(kindKey, d) {
+  const kind = YGO_KINDS[kindKey] || YGO_KINDS.m;
+  const types = [kindKey === 's' ? 'Magia' : kindKey === 't' ? 'Trampa' : 'Monstruo'];
+  if (kindKey === 'x') types.push('Extra Deck');
+  const cats = Object.fromEntries(YGO_CATEGORIES.map((c) => [c.value, c.label]));
+  const attrs = Object.fromEntries(YGO_ATTRIBUTES.map((a) => [a.value, a.label]));
+  const races = Object.fromEntries(YGO_RACES.map((r) => [r.value, r.label]));
+  const out = { colors: [], types, subtypes: [], attribute: '', cost: null, level: null, power: null };
+  if (!d) return out;
+  (d[5] ? d[5].split(',') : []).forEach((t) => cats[t] && types.push(cats[t]));
+  if (d[6]) out.subtypes.push(YGO_SUB_LABELS[d[6]] || d[6]);
+  if (d[1]) out.subtypes.push(races[d[1]] || d[1]);
+  out.attribute = attrs[d[0]] || d[0] || '';
+  out.level = cleanNum(d[2]);
+  out.power = cleanNum(d[3]);
+  return out;
+}
+
+async function mtgFacetsFor(cards, onProgress) {
+  const result = new Map();
+  const ids = [...new Set(cards.map((c) => c.cardId))];
+  for (let i = 0; i < ids.length; i += 75) {
+    const chunk = ids.slice(i, i + 75);
+    let res;
+    try {
+      res = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ identifiers: chunk.map((id) => ({ id })) }),
+      });
+    } catch (err) {
+      break;
+    }
+    if (!res.ok) break;
+    const data = await res.json().catch(() => null);
+    ((data && data.data) || []).forEach((c) => result.set(c.id, mtgFacets(c)));
+    onProgress(Math.min(i + 75, ids.length), ids.length);
+    if (i + 75 < ids.length) await new Promise((r) => setTimeout(r, 120)); // Scryfall pide ~10 peticiones/s como máximo
+  }
+  return result;
+}
+
+async function ygoFacetsFor(cards) {
+  const result = new Map();
+  const [index, details, arts] = await Promise.all([
+    loadYgoIndex('en'),
+    loadOnce('/data/ygo/details.json', 'No se pudo cargar los datos de las cartas'),
+    loadOnce('/data/ygo/arts.json', 'No se pudo cargar los artes alternativos').catch(() => ({})),
+  ]);
+  const byId = new Map(index.map((e) => [String(e.row[0]), e.row]));
+  // Un arte alternativo tiene su propio cardId: se busca la carta a la que pertenece
+  const owner = new Map();
+  for (const [base, list] of Object.entries(arts || {})) list.forEach((a) => owner.set(String(Array.isArray(a) ? a[0] : a), base));
+  for (const c of cards) {
+    const id = String(c.cardId);
+    const baseId = byId.has(id) ? id : owner.get(id);
+    const row = baseId && byId.get(baseId);
+    if (row) result.set(c.cardId, ygoFacets(row[3], details[baseId]));
+  }
+  return result;
+}
+
+async function digimonFacetsFor(cards, onProgress) {
+  const result = new Map();
+  const bases = [...new Set(cards.map((c) => String(c.cardId).replace(/_P\d+$/i, '')))];
+  const found = new Map();
+  let done = 0;
+  for (const base of bases) {
+    try {
+      const list = await fetchDigimon(new URLSearchParams({ series: 'Digimon Card Game', card: base, limit: '5' }));
+      const hit = list.find((c) => String(c.id || c.cardnumber) === base);
+      if (hit) found.set(base, digimonFacets(hit));
+    } catch (err) {
+      break; // límite de la API o sin conexión: se completará en otra visita
+    }
+    onProgress(++done, bases.length);
+    await new Promise((r) => setTimeout(r, 750)); // la API admite 15 peticiones cada 10 s
+  }
+  for (const c of cards) {
+    const f = found.get(String(c.cardId).replace(/_P\d+$/i, ''));
+    if (f) result.set(c.cardId, f);
+  }
+  return result;
+}
+
+// Devuelve Map(cardId -> facets) para las cartas indicadas ({cardId}); las que no se encuentran faltan en el mapa
+export async function facetsForCards(gameKey, cards, onProgress = () => {}) {
+  if (!cards.length) return new Map();
+  if (gameKey === 'mtg') return mtgFacetsFor(cards, onProgress);
+  if (gameKey === 'yugioh' || gameKey === 'ygo') return ygoFacetsFor(cards);
+  if (gameKey === 'digimon') return digimonFacetsFor(cards, onProgress);
+  return new Map();
+}
+
 export function getLanguages(gameKey) {
   return (providers[gameKey] && providers[gameKey].languages) || FALLBACK_LANGUAGES;
 }

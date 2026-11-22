@@ -15,7 +15,7 @@ import { el, clear, toast, markPreviewable, withImageFallback } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function icon(paths, size = 16) {
+export function icon(paths, size = 16) {
   const svg = document.createElementNS(SVG_NS, 'svg');
   for (const [k, v] of Object.entries({
     viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor',
@@ -29,14 +29,14 @@ function icon(paths, size = 16) {
   return svg;
 }
 
-const filterIcon = () => icon(['M3 5h18', 'M6 12h12', 'M10 19h4']);
-const closeIcon = () => icon(['M6 6l12 12', 'M18 6L6 18'], 14);
-const checkIcon = () => icon(['M5 12.5l4.5 4.5L19 7.5'], 14);
+export const filterIcon = () => icon(['M3 5h18', 'M6 12h12', 'M10 19h4']);
+export const closeIcon = () => icon(['M6 6l12 12', 'M18 6L6 18'], 14);
+export const checkIcon = () => icon(['M5 12.5l4.5 4.5L19 7.5'], 14);
 
 // ---------- Controles de cada tipo de filtro ----------
 // Cada control devuelve { node, read(), write(valor) }
 let uid = 0;
-const nextId = (prefix) => `${prefix}-${++uid}`;
+export const nextId = (prefix) => `${prefix}-${++uid}`;
 
 function fieldWrap(field, control, labelFor) {
   const wrap = el('div', { class: 'cs-field' });
@@ -252,16 +252,16 @@ function makeCombo(field) {
   return control;
 }
 
-const MAKERS = { select: makeSelect, chips: makeChips, range: makeRange, number: makeNumber, text: makeText, combo: makeCombo };
+export const MAKERS = { select: makeSelect, chips: makeChips, range: makeRange, number: makeNumber, text: makeText, combo: makeCombo };
 
 // ---------- Descripción de los filtros activos ----------
-function isEmptyValue(field, value) {
+export function isEmptyValue(field, value) {
   if (field.type === 'chips') return !Array.isArray(value) || value.length === 0;
   if (field.type === 'range') return !value || (String(value.min ?? '') === '' && String(value.max ?? '') === '');
   return value === undefined || value === null || String(value).trim() === '';
 }
 
-function describeValue(field, value, control) {
+export function describeValue(field, value, control) {
   if (field.type === 'chips') {
     return value.map((v) => (field.options.find((o) => o.value === v) || { label: v }).label).join(', ');
   }

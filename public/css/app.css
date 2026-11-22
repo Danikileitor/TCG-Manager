@@ -988,3 +988,8 @@
   .card-viewer[open] { animation: none; }
   .card-tip { transition: none; }
 }
+
+/* ===== Filtros de "Mi colección" ===== */
+#filters-active .cs-active { margin: -0.4rem 0 0.8rem; }
+.enrich-status { font-size: 0.85rem; margin: -0.2rem 0 0.8rem; }
+.toolbar #filters-mount { display: inline-flex; align-items: center; }

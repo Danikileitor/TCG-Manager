@@ -6,11 +6,14 @@ import { createCatalogSearch } from './catalog-search.js';
 import { initCardPreview } from './card-viewer.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
+import { createCollectionFilters, matchesFilters, matchesName, sortCards, SORTS } from './collection-filters.js';
+import { facetsForCards } from './card-providers.js';
 
 const collectionGrid = document.getElementById('collection-grid');
 const resultList = document.getElementById('result-list');
 const filterInput = document.getElementById('filter-input');
-const filterLang = document.getElementById('filter-lang');
+const sortSelect = document.getElementById('sort-select');
+const enrichStatus = document.getElementById('enrich-status');
 const langSelect = document.getElementById('lang-select');
 const statsBox = document.getElementById('stats');
 
@@ -19,26 +22,20 @@ let cards = [];
 let catalogLang = 'en'; // idioma elegido para buscar en el catálogo
 
 // ---------- Mi colección ----------
-// Cartas visibles según el filtro de idioma (se filtra en el navegador)
+// Cartas visibles según la búsqueda, los filtros y el orden (todo en el navegador)
+let filters = null;
 function visibleCards() {
-  return filterLang.value ? cards.filter((c) => c.language === filterLang.value) : cards;
-}
-
-// El filtro de idioma ofrece solo los idiomas que el usuario tiene en su colección
-function refreshLanguageFilter() {
-  const selected = filterLang.value;
-  const present = [...new Set(cards.map((c) => c.language).filter(Boolean))].sort();
-  clear(filterLang);
-  filterLang.append(el('option', { value: '', text: 'Todos los idiomas' }));
-  present.forEach((code) => filterLang.append(el('option', { value: code, text: langShort(code) })));
-  filterLang.value = present.includes(selected) ? selected : '';
+  const text = filterInput.value;
+  const values = filters ? filters.values : {};
+  return sortCards(cards.filter((c) => matchesName(c, text) && matchesFilters(c, values)), sortSelect.value);
 }
 
 function renderStats(list) {
   const total = list.reduce((sum, c) => sum + c.quantity, 0);
+  const filtered = list.length !== cards.length;
   clear(statsBox);
   statsBox.append(
-    el('span', {}, 'Cartas distintas: ', el('strong', { text: list.length })),
+    el('span', {}, 'Cartas distintas: ', el('strong', { text: filtered ? `${list.length} de ${cards.length}` : list.length })),
     el('span', {}, 'Total de copias: ', el('strong', { text: total }))
   );
 }
@@ -53,7 +50,7 @@ function renderCollection() {
       el('div', {
         class: 'empty',
         text: cards.length
-          ? 'No tienes cartas en este idioma.'
+          ? 'Ninguna carta de tu colección coincide con la búsqueda y los filtros.'
           : 'Todavía no tienes cartas aquí. Busca en el catálogo (panel derecho) y pulsa "Añadir".',
       })
     );
@@ -94,15 +91,45 @@ function renderCollection() {
 }
 
 async function loadCollection() {
-  const q = filterInput.value.trim();
-  const params = new URLSearchParams({ game: game.key });
-  if (q) params.set('q', q);
   try {
-    ({ cards } = await api.get(`/collection?${params}`));
-    refreshLanguageFilter();
+    ({ cards } = await api.get(`/collection?game=${encodeURIComponent(game.key)}`));
     renderCollection();
+    enrichMissingFacets();
   } catch (err) {
     toast(err.message, 'error');
+  }
+}
+
+// Las cartas guardadas antes de existir los filtros no tienen color, tipo, coste…: se completan una vez
+// (se consultan al catálogo y se guardan en tu cuenta) y se vuelven a pintar.
+let enriching = false;
+async function enrichMissingFacets() {
+  const missing = cards.filter((c) => !c.facets);
+  if (enriching || missing.length === 0) return;
+  enriching = true;
+  enrichStatus.classList.remove('hidden');
+  enrichStatus.textContent = `Completando datos de ${missing.length} cartas para poder filtrar…`;
+  try {
+    const found = await facetsForCards(game.key, missing, (done, total) => {
+      enrichStatus.textContent = `Completando datos para filtrar… ${done}/${total}`;
+    });
+    const items = [];
+    for (const card of missing) {
+      const f = found.get(card.cardId);
+      if (f) {
+        card.facets = f;
+        items.push({ id: card._id, facets: f });
+      }
+    }
+    for (let i = 0; i < items.length; i += 400) await api.put('/collection', { items: items.slice(i, i + 400) });
+    renderCollection();
+    const left = cards.filter((c) => !c.facets).length;
+    enrichStatus.textContent = left ? `${left} cartas sin datos de filtrado (no se encontraron en el catálogo o se reintentará en la próxima visita).` : '';
+    enrichStatus.classList.toggle('hidden', !left);
+  } catch (err) {
+    enrichStatus.textContent = 'No se pudieron completar los datos para filtrar; se reintentará en la próxima visita.';
+  } finally {
+    enriching = false;
   }
 }
 
@@ -121,7 +148,6 @@ async function removeCard(card) {
   try {
     await api.del(`/collection?id=${encodeURIComponent(card._id)}`);
     cards = cards.filter((c) => c._id !== card._id);
-    refreshLanguageFilter();
     renderCollection();
     toast('Carta eliminada', 'success');
   } catch (err) {
@@ -141,6 +167,7 @@ async function addFromCatalog(result) {
       backKind: result.backKind || '',
       setCode: result.setCode,
       rarity: result.rarity,
+      facets: result.facets || undefined,
       language: result.language || catalogLang, // idioma de esta copia (nombre e imagen oficiales)
       quantity: 1,
     });
@@ -165,8 +192,8 @@ function buildCatalogSearch() {
   });
 }
 
-filterInput.addEventListener('input', debounce(loadCollection, 350));
-filterLang.addEventListener('change', renderCollection);
+filterInput.addEventListener('input', debounce(renderCollection, 200));
+sortSelect.addEventListener('change', renderCollection);
 
 // ---------- Inicio ----------
 async function init() {
@@ -189,6 +216,15 @@ async function init() {
     },
   });
   buildCatalogSearch();
+
+  SORTS.forEach((o) => sortSelect.append(el('option', { value: o.value, text: o.label })));
+  filters = createCollectionFilters({
+    gameKey: game.key,
+    mount: document.getElementById('filters-mount'),
+    getCards: () => cards,
+    onChange: renderCollection,
+  });
+  document.getElementById('filters-active').append(filters.activeBox);
 
   loadCollection();
 }
