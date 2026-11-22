@@ -11,7 +11,7 @@
 // Todo el DOM se construye con textContent (nunca innerHTML con datos externos).
 import { getFilterSchema, getAltArtsInfo } from './card-providers.js';
 import { langShort } from './language.js';
-import { el, clear, toast, markPreviewable } from './ui.js';
+import { el, clear, toast, markPreviewable, withImageFallback } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -288,7 +288,7 @@ export function resultItem(card, action) {
     : el('div', { class: 'ph' });
   // Si la imagen no carga (enlace roto), se muestra el hueco gris en su lugar
   if (thumb.tagName === 'IMG') {
-    thumb.addEventListener('error', () => thumb.replaceWith(el('div', { class: 'ph' })), { once: true });
+    withImageFallback(thumb, () => thumb.replaceWith(el('div', { class: 'ph' })));
   }
   return el(
     'div',
