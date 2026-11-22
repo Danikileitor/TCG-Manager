@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
+import { createCatalogSearch } from './catalog-search.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
 
@@ -10,8 +11,6 @@ const resultList = document.getElementById('result-list');
 const filterInput = document.getElementById('filter-input');
 const filterLang = document.getElementById('filter-lang');
 const langSelect = document.getElementById('lang-select');
-const catalogForm = document.getElementById('catalog-form');
-const catalogInput = document.getElementById('catalog-input');
 const statsBox = document.getElementById('stats');
 
 let game = null;
@@ -149,52 +148,18 @@ async function addFromCatalog(result) {
   }
 }
 
-function renderResults(results) {
-  clear(resultList);
-  if (results.length === 0) {
-    resultList.append(el('div', { class: 'empty', text: 'Sin resultados' }));
-    return;
-  }
-  results.forEach((r) => {
-    const thumb = r.imageUrl
-      ? el('img', { src: r.imageUrl, alt: r.name, loading: 'lazy', referrerpolicy: 'no-referrer' })
-      : el('div', { class: 'ph' });
-    resultList.append(
-      el(
-        'div',
-        { class: 'result-item' },
-        thumb,
-        el(
-          'div',
-          {},
-          el('div', { class: 'name', text: r.name }),
-          r.altName ? el('div', { class: 'meta', text: `EN: ${r.altName}` }) : null,
-          el('div', { class: 'meta', text: [r.typeLine, r.setCode, r.rarity].filter(Boolean).join(' · ') })
-        ),
-        el('button', { class: 'btn btn-sm', type: 'button', text: 'Añadir', onClick: () => addFromCatalog(r) })
-      )
-    );
+let catalogSearch = null;
+
+function buildCatalogSearch() {
+  catalogSearch = createCatalogSearch({
+    gameKey: game.key,
+    mount: document.getElementById('catalog-search'),
+    resultList,
+    idleMessage: 'Busca una carta por nombre o usa los filtros para añadirla a tu colección.',
+    search: (req) => searchCatalog(game.key, req.query, catalogLang, req),
+    renderAction: (card) => el('button', { class: 'btn btn-sm', type: 'button', text: 'Añadir', onClick: () => addFromCatalog(card) }),
   });
 }
-
-async function runCatalogSearch() {
-  const q = catalogInput.value.trim();
-  if (q.length < 2) return toast('Escribe al menos 2 caracteres', 'error');
-
-  clear(resultList);
-  resultList.append(el('div', { class: 'spinner' }));
-  try {
-    renderResults(await searchCatalog(game.key, q, catalogLang));
-  } catch (err) {
-    clear(resultList);
-    resultList.append(el('div', { class: 'empty', text: err.message }));
-  }
-}
-
-catalogForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  runCatalogSearch();
-});
 
 filterInput.addEventListener('input', debounce(loadCollection, 350));
 filterLang.addEventListener('change', renderCollection);
@@ -215,10 +180,11 @@ async function init() {
     gameKey: game.key,
     onChange: (code) => {
       catalogLang = code;
-      // Si ya había una búsqueda escrita, se repite en el nuevo idioma
-      if (catalogInput.value.trim().length >= 2) runCatalogSearch();
+      // Si ya había una búsqueda, se repite en el nuevo idioma
+      catalogSearch.refresh();
     },
   });
+  buildCatalogSearch();
 
   loadCollection();
 }

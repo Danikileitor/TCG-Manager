@@ -25,8 +25,9 @@ tcg-manager/
 │   ├── terms.html               # condiciones del servicio
 │   ├── css/  base.css · login.css · home.css · app.css · legal.css
 │   ├── js/   api.js · ui.js · session.js · auth.js · home.js
-│   │         collection.js · deck-builder.js · card-providers.js · games-cache.js · language.js
-│   ├── data/ygo/                # índices de búsqueda de Yu-Gi-Oh! (uno por idioma, generados)
+│   │         collection.js · deck-builder.js · card-providers.js · catalog-search.js
+│   │         games-cache.js · language.js
+│   ├── data/ygo/                # datos de Yu-Gi-Oh! (nombres por idioma, filtros, sets, artes alt.), generados
 │   ├── site.webmanifest         # manifest de la web app (instalable)
 │   └── favicon.ico · favicon-96x96.png · apple-touch-icon.png
 │       web-app-manifest-192x192.png · web-app-manifest-512x512.png
@@ -37,7 +38,7 @@ tcg-manager/
     ├── auth-register.js · auth-login.js · auth-logout.js · auth-me.js
     ├── auth-google.js · auth-config.js
     ├── games.js · collection.js · decks.js
-    ├── digimon-search.js        # proxy de la búsqueda de Digimon (evita CORS)
+    ├── digimon-search.js        # plan B de la búsqueda de Digimon (llama a la API desde el servidor)
 ```
 
 ## 1. Preparar MongoDB Atlas
@@ -132,9 +133,27 @@ En la colección y en el constructor de mazos hay un selector de **idioma de las
 
 Los idiomas de cada TCG se declaran en `public/js/card-providers.js` (`languages` de cada proveedor): para añadir idiomas basta con cambiar de fuente o ampliar esa lista. La lista de códigos válidos del servidor está en `netlify/functions/_lib/games.js` (`VALID_LANGUAGES`).
 
+### Búsqueda avanzada y artes alternativos
+
+El buscador de cartas (`public/js/catalog-search.js`, usado en la colección y en el constructor de mazos) tiene un botón **Filtros** que abre un panel lateral, las etiquetas de los filtros activos (se quitan una a una) y la casilla **Incluir artes alternativos** (desactivada por defecto). Se puede buscar solo con filtros, sin escribir un nombre, y los resultados se cargan por páginas ("Cargar más resultados").
+
+Cada TCG declara sus filtros en `public/js/card-providers.js` (`filters` de cada proveedor); el panel se dibuja solo a partir de esa lista:
+
+| TCG | Filtros |
+| --- | ------- |
+| Magic | Tipo, subtipo, texto de reglas, colores (con modo incluye/exacto/solo), identidad de color, coste de maná, fuerza, resistencia, edición, rareza, formato |
+| Yu-Gi-Oh! | Tipo de carta, subtipo de Magia/Trampa, atributo, tipo de monstruo, categoría (Efecto, Sincronía, Xyz…), nivel/rango/enlace, ATK, DEF, escala de Péndulo, set |
+| Digimon | Tipo, color, texto del efecto, nivel, etapa, atributo, tipo digital, coste de juego, coste y color de evolución, DP, pack, número de carta, rareza, ilustrador |
+
+Artes alternativos: en Magic se usa `unique=art` de Scryfall (una carta por ilustración); en Yu-Gi-Oh! salen las imágenes extra de cada carta en YGOJSON, con su propio `cardId`; en Digimon se consideran artes alternativos las cartas con número `_P1`, `_P2`… Las cartas con otra ilustración llevan la etiqueta "Arte alt.".
+
+**Digimon:** la [API de digimoncard.io](https://digimoncard.io/api-documentation) admite llamadas desde cualquier dominio, pero limita a 15 peticiones cada 10 segundos por IP, por eso el navegador de cada usuario la llama directamente (con una caché de 5 minutos en memoria). Si el navegador no puede (bloqueador, red, etc.), usa como plan B la función `netlify/functions/digimon-search.js`. La API no tiene filtro de rareza ni de artes alternativos: se aplican en local sobre la respuesta, por eso la rareza necesita ir con otro criterio (nombre, color…). Sin resultados, la API responde HTTP 400 y la web lo muestra como "Sin resultados".
+
+En el constructor de mazos, los filtros solo están en la pestaña **Catálogo**; "Mi colección" sigue buscando por nombre.
+
 ### Yu-Gi-Oh!: índice de YGOJSON
 
-[YGOJSON](https://github.com/iconmaster5326/YGOJSON) no es una API de búsqueda, sino miles de cartas en archivos JSON (el agregado pesa ~110 MB). Por eso el script `scripts/build-ygo-index.mjs` genera un índice mínimo por idioma en `public/data/ygo/` (id, nombre oficial, nombre en inglés, tipo e imagen). El navegador descarga solo el del idioma elegido, la primera vez que se busca (~1 MB sin comprimir, ~0,3 MB comprimido; Netlify lo comprime y `netlify.toml` lo cachea), y busca en local sin más peticiones.
+[YGOJSON](https://github.com/iconmaster5326/YGOJSON) no es una API de búsqueda, sino miles de cartas en archivos JSON (el agregado pesa ~110 MB). Por eso el script `scripts/build-ygo-index.mjs` genera un índice mínimo por idioma en `public/data/ygo/` (id, nombre oficial, nombre en inglés, tipo e imagen). El navegador descarga solo el del idioma elegido, la primera vez que se busca (~1 MB sin comprimir, ~0,3 MB comprimido; Netlify lo comprime y `netlify.toml` lo cachea), y busca en local sin más peticiones. Los demás archivos solo se descargan si se usan: `details.json` (atributo, tipo, nivel, ATK/DEF…) al aplicar filtros, `sets.json` y `cardsets.json` al filtrar por set, y `arts.json` al activar los artes alternativos.
 
 - **Los índices ya están generados** y van en el repositorio: no hace falta ejecutar nada para desplegar.
 - **Para actualizarlos** (Node 18 o superior, sin dependencias): `node scripts/build-ygo-index.mjs` y sube los cambios de `public/data/ygo`. El script descarga unos 35 MB de GitHub.
@@ -162,7 +181,7 @@ El catálogo **no se guarda** en tu base de datos; se consulta desde el navegado
 | --------- | ----------------------------------------------- |
 | MTG       | API de Scryfall                                 |
 | Yu-Gi-Oh! | Índice propio generado desde YGOJSON (ver arriba) |
-| Digimon   | API de digimoncard.io, a través de la función `digimon-search` (la API no admite llamadas directas desde el navegador) |
+| Digimon   | API de digimoncard.io, llamada desde el navegador (plan B: función `digimon-search`) |
 
 Tú solo guardas lo que posee cada usuario (`usercards`) y sus mazos (`decks`), referenciando cada carta por su `cardId`. Si una API cambia sus campos o sus condiciones de acceso, solo hay que tocar `card-providers.js`. Si más adelante quieres cachear el catálogo en Atlas, bastaría con añadir una función `cards.js` y una colección `cards`.
 

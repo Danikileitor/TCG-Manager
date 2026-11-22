@@ -3,6 +3,9 @@
 // (https://github.com/iconmaster5326/YGOJSON), un archivo pequeño por idioma:
 //
 //   public/data/ygo/<idioma>.json   (es, en, fr, de, it, pt, ja, ko, zhs, zht)
+//   public/data/ygo/details.json    (datos para los filtros: atributo, tipo, nivel, ATK/DEF...)
+//   public/data/ygo/sets.json       (lista de sets) y cardsets.json (en qué sets está cada carta)
+//   public/data/ygo/arts.json       (artes alternativos de cada carta)
 //   public/data/ygo/meta.json
 //
 // YGOJSON no es una API de búsqueda: son miles de cartas en archivos JSON (el agregado
@@ -115,6 +118,9 @@ async function main() {
 
   const usable = cards.filter((c) => !EXCLUDED.includes(c.cardType));
   const byLang = Object.fromEntries(Object.values(LANGS).map((l) => [l, []]));
+  const details = {}; // cardId -> datos para filtrar
+  const arts = {}; // cardId -> artes alternativos
+  const cardSetUuids = {}; // cardId -> uuids de sets
 
   for (const card of usable) {
     // El passcode sin ceros a la izquierda coincide con el id de YGOPRODeck usado hasta ahora
@@ -123,10 +129,44 @@ async function main() {
     const passcode = /^\d+$/.test(rawPasscode) ? String(parseInt(rawPasscode, 10)) : rawPasscode;
     const cardId = passcode || card.id;
     const enName = card.text.en && card.text.en.name;
-    const image = card.images && card.images[0] && card.images[0].card;
+    // Imagen principal: la del passcode de la carta (si no, la primera)
+    const images = card.images || [];
+    const mainInfo =
+      images.find((i) => rawPasscode && (i.password === rawPasscode || (i.card || '').endsWith(`/${rawPasscode}.jpg`))) || images[0];
+    const image = mainInfo && mainInfo.card;
     // Solo se guarda la URL de la imagen cuando no sigue el patrón por defecto
     const img = !image || (passcode && image === DEFAULT_IMG(passcode)) ? '' : image;
     const kind = kindOf(card);
+
+    // Datos para los filtros (no dependen del idioma)
+    const tags = [...new Set([...(card.classifications || []), ...(card.monsterCardTypes || [])])];
+    const level = card.level ?? card.rank ?? ((card.linkArrows || []).length || null);
+    details[cardId] = [
+      card.attribute || '',
+      card.type || '',
+      level,
+      card.atk ?? null,
+      card.def ?? null,
+      tags.join(','),
+      card.subcategory || '',
+      card.scale ?? null,
+    ];
+
+    // Artes alternativos: el resto de imágenes de la carta (la primera es la principal)
+    const extra = [];
+    for (const imageInfo of images) {
+      if (imageInfo === mainInfo) continue;
+      const art = imageInfo.card;
+      if (!art || art === image) continue;
+      // Algunas imágenes no traen passcode: se deduce del nombre del archivo, o se usa su uuid
+      const fromUrl = /\/cards\/(\d+)\.jpg$/.exec(art);
+      const rawId = imageInfo.password || (fromUrl && fromUrl[1]) || imageInfo.id;
+      const artId = /^\d+$/.test(rawId) ? String(parseInt(rawId, 10)) : rawId;
+      if (artId === cardId) continue;
+      extra.push(fromUrl && String(parseInt(fromUrl[1], 10)) === artId ? artId : [artId, art]);
+    }
+    if (extra.length) arts[cardId] = extra;
+    cardSetUuids[cardId] = [...new Set(card.sets || [])];
 
     for (const [srcLang, lang] of Object.entries(LANGS)) {
       const name = card.text[srcLang] && card.text[srcLang].name;
@@ -143,6 +183,47 @@ async function main() {
     writeFileSync(join(OUT_DIR, `${lang}.json`), JSON.stringify(rows));
     counts[lang] = rows.length;
   }
+  writeFileSync(join(OUT_DIR, 'details.json'), JSON.stringify(details));
+  writeFileSync(join(OUT_DIR, 'arts.json'), JSON.stringify(arts));
+
+  // Sets: se guardan solo los que tienen cartas y se enlazan por posición
+  let sets = [];
+  try {
+    sets = JSON.parse(readZipEntry(zip, 'sets.json').toString('utf8'));
+  } catch (err) {
+    console.warn('Aviso: no se pudo leer sets.json, el filtro de sets no estará disponible');
+  }
+  const setList = [];
+  const setIndex = new Map();
+  for (const set of sets) {
+    const locales = Object.values(set.locales || {});
+    const en = (set.locales || {}).en;
+    const prefix = String((en && en.prefix) || (locales[0] && locales[0].prefix) || '');
+    const code = prefix.replace(/-[A-Z]{1,3}\d*$/, '');
+    const name = (set.name && (set.name.en || Object.values(set.name)[0])) || code;
+    if (name) setIndex.set(set.id, { code, name });
+  }
+  const used = new Map();
+  const cardSets = {};
+  for (const [cardId, uuids] of Object.entries(cardSetUuids)) {
+    const list = [];
+    for (const uuid of uuids) {
+      if (!setIndex.has(uuid)) continue;
+      if (!used.has(uuid)) {
+        used.set(uuid, setList.length);
+        setList.push(setIndex.get(uuid));
+      }
+      list.push(used.get(uuid));
+    }
+    if (list.length) cardSets[cardId] = list;
+  }
+  // Ordenados por nombre; hay que reasignar posiciones
+  const order = setList.map((s, i) => i).sort((a, b) => setList[a].name.localeCompare(setList[b].name, 'en'));
+  const remap = new Map(order.map((oldIdx, newIdx) => [oldIdx, newIdx]));
+  writeFileSync(join(OUT_DIR, 'sets.json'), JSON.stringify(order.map((i) => [setList[i].code, setList[i].name])));
+  for (const id of Object.keys(cardSets)) cardSets[id] = cardSets[id].map((i) => remap.get(i));
+  writeFileSync(join(OUT_DIR, 'cardsets.json'), JSON.stringify(cardSets));
+
   writeFileSync(
     join(OUT_DIR, 'meta.json'),
     JSON.stringify({
@@ -151,6 +232,8 @@ async function main() {
       sourceLastYGOProDeckRead: sourceMeta.lastYGOProDeckRead || null,
       sourceLastYugipediaRead: sourceMeta.lastYugipediaRead || null,
       cards: usable.length,
+      sets: setList.length,
+      cardsWithAlternateArt: Object.keys(arts).length,
       perLanguage: counts,
     })
   );

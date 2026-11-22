@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
+import { createCatalogSearch, resultItem } from './catalog-search.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, debounce } from './ui.js';
 
@@ -268,42 +269,49 @@ async function deleteDeck() {
 }
 
 // ---------- Origen de cartas: colección o catálogo ----------
-function setSource(newSource) {
-  source = newSource;
-  els.srcCollection.classList.toggle('active', source === 'collection');
-  els.srcCatalog.classList.toggle('active', source === 'catalog');
-  els.searchInput.placeholder = source === 'collection' ? 'Filtrar mi colección…' : 'Buscar en el catálogo…';
-  // El idioma solo se elige al buscar en el catálogo; las cartas de la colección ya tienen el suyo
-  els.langField.classList.toggle('hidden', source !== 'catalog');
-  runSearch();
+let catalogSearch = null;
+
+function buildCatalogSearch() {
+  catalogSearch = createCatalogSearch({
+    gameKey: game.key,
+    mount: document.getElementById('catalog-search'),
+    resultList: els.resultList,
+    idleMessage: 'Busca una carta por nombre o usa los filtros para añadirla al mazo.',
+    search: (req) => searchCatalog(game.key, req.query, catalogLang, req),
+    renderAction: (card) =>
+      el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(card, els.targetZone.value) }),
+  });
 }
 
+function setSource(newSource) {
+  source = newSource;
+  const inCatalog = source === 'catalog';
+  els.srcCollection.classList.toggle('active', !inCatalog);
+  els.srcCatalog.classList.toggle('active', inCatalog);
+  // El idioma y los filtros solo se usan al buscar en el catálogo; las cartas de la colección ya tienen el suyo
+  els.langField.classList.toggle('hidden', !inCatalog);
+  els.searchForm.classList.toggle('hidden', inCatalog);
+  document.getElementById('catalog-search').classList.toggle('hidden', !inCatalog);
+
+  if (inCatalog) {
+    catalogSearch.refresh();
+    if (!els.resultList.firstChild) catalogSearch.showIdle();
+  } else {
+    catalogSearch.cancel();
+    runSearch();
+  }
+}
+
+// Resultados de "Mi colección"
 function renderResults(results) {
   clear(els.resultList);
   if (results.length === 0) {
-    els.resultList.append(
-      el('div', { class: 'empty', text: source === 'collection' ? 'Tu colección está vacía o no hay coincidencias.' : 'Sin resultados' })
-    );
+    els.resultList.append(el('div', { class: 'empty', text: 'Tu colección está vacía o no hay coincidencias.' }));
     return;
   }
   results.forEach((r) => {
-    const thumb = r.imageUrl
-      ? el('img', { src: r.imageUrl, alt: r.name, loading: 'lazy', referrerpolicy: 'no-referrer' })
-      : el('div', { class: 'ph' });
     els.resultList.append(
-      el(
-        'div',
-        { class: 'result-item' },
-        thumb,
-        el(
-          'div',
-          {},
-          el('div', { class: 'name' }, r.name, langBadge(r.language)),
-          r.altName ? el('div', { class: 'meta', text: `EN: ${r.altName}` }) : null,
-          el('div', { class: 'meta', text: [r.typeLine, r.setCode, r.rarity].filter(Boolean).join(' · ') })
-        ),
-        el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(r, els.targetZone.value) })
-      )
+      resultItem(r, el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(r, els.targetZone.value) }))
     );
   });
 }
@@ -312,21 +320,11 @@ async function runSearch() {
   const q = els.searchInput.value.trim();
   clear(els.resultList);
   els.resultList.append(el('div', { class: 'spinner' }));
-
   try {
-    if (source === 'collection') {
-      const params = new URLSearchParams({ game: game.key });
-      if (q) params.set('q', q);
-      const { cards } = await api.get(`/collection?${params}`);
-      renderResults(cards.map((c) => ({ ...c, typeLine: '', zoneHint: 'main' })));
-    } else {
-      if (q.length < 2) {
-        clear(els.resultList);
-        els.resultList.append(el('div', { class: 'empty', text: 'Escribe al menos 2 caracteres y pulsa Buscar.' }));
-        return;
-      }
-      renderResults(await searchCatalog(game.key, q, catalogLang));
-    }
+    const params = new URLSearchParams({ game: game.key });
+    if (q) params.set('q', q);
+    const { cards } = await api.get(`/collection?${params}`);
+    renderResults(cards.map((c) => ({ ...c, typeLine: '', zoneHint: 'main' })));
   } catch (err) {
     clear(els.resultList);
     els.resultList.append(el('div', { class: 'empty', text: err.message }));
@@ -387,9 +385,11 @@ async function init() {
     gameKey: game.key,
     onChange: (code) => {
       catalogLang = code;
-      if (source === 'catalog' && els.searchInput.value.trim().length >= 2) runSearch();
+      if (source === 'catalog') catalogSearch.refresh();
     },
   });
+
+  buildCatalogSearch();
 
   try {
     await loadDecks('');
