@@ -200,7 +200,6 @@ function renderZones() {
           el(
             'div',
             { class: 'deck-row' },
-            star,
             markPreviewable(el('span', { class: 'deck-name' }, card.name, langBadge(card.language)), card),
             el(
               'span',
@@ -209,6 +208,7 @@ function renderZones() {
               el('span', { text: `x${card.quantity}` }),
               el('button', { type: 'button', text: '+', 'aria-label': 'Añadir una copia', onClick: () => changeQty(card, 1) })
             ),
+            star,
             el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: '✕', 'aria-label': 'Quitar del mazo', onClick: () => removeCard(card) })
           )
         );

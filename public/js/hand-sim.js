@@ -50,9 +50,16 @@ const aspectOf = (src) => {
   return w && h ? w / h : ASPECT;
 };
 // Escala de UV para que la imagen cubra toda la carta
+// (más un 2 % de sobra para que no quede ni un píxel de borde sin cubrir en los extremos)
+const OVERSCAN = 0.98;
 function coverScale(imgAspect) {
-  if (Math.abs(imgAspect - ASPECT) < 0.01) return [1, 1];
-  return imgAspect > ASPECT ? [ASPECT / imgAspect, 1] : [1, imgAspect / ASPECT];
+  let sx = 1;
+  let sy = 1;
+  if (Math.abs(imgAspect - ASPECT) >= 0.01) {
+    if (imgAspect > ASPECT) sx = ASPECT / imgAspect;
+    else sy = imgAspect / ASPECT;
+  }
+  return [sx * OVERSCAN, sy * OVERSCAN];
 }
 
 // Carta sin imagen: se dibuja el nombre
