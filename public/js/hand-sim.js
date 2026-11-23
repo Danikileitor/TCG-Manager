@@ -3,7 +3,7 @@
 import { el, clear, toast } from './ui.js';
 import { createHandSim, rulesFor } from './hand-logic.js';
 import { mat, findDefaultBack, makeGenericBack, openCardViewer } from './card-viewer.js';
-import { sizedUrl, imageChain, betterImageUrl } from './card-images.js';
+import { viewerUrls } from './card-images.js';
 
 const ASPECT = 63 / 88; // ancho / alto de una carta
 const FOV = (30 * Math.PI) / 180;
@@ -29,8 +29,7 @@ function loadCardImage(url) {
   if (!url) return Promise.resolve(null);
   if (!imageCache.has(url)) {
     imageCache.set(url, (async () => {
-      const b = betterImageUrl(url);
-      const list = [...new Set([sizedUrl(b, 'tip'), b, ...imageChain(b), url])];
+      const list = viewerUrls(url); // las mismas versiones, y en el mismo orden, que el visor 3D
       for (const u of list) {
         try { return { img: await loadImg(u, true), cors: true, src: u }; } catch (err) { /* siguiente */ }
       }
