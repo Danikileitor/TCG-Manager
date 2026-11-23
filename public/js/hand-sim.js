@@ -50,8 +50,6 @@ const aspectOf = (src) => {
   return w && h ? w / h : ASPECT;
 };
 // Escala de UV para que la imagen cubra toda la carta
-// (más un 2 % de sobra para que no quede ni un píxel de borde sin cubrir en los extremos)
-const OVERSCAN = 0.98;
 function coverScale(imgAspect) {
   let sx = 1;
   let sy = 1;
@@ -59,7 +57,7 @@ function coverScale(imgAspect) {
     if (imgAspect > ASPECT) sx = ASPECT / imgAspect;
     else sy = imgAspect / ASPECT;
   }
-  return [sx * OVERSCAN, sy * OVERSCAN];
+  return [sx, sy];
 }
 
 // Carta sin imagen: se dibuja el nombre
@@ -177,6 +175,7 @@ function createGLRenderer(stage) {
   let W = 1;
   let H = 1;
   let quads = [];
+  let pileQuad = null;
 
   function modelOf(c, dx = 0, dy = 0, dz = 0) {
     let m = mat.multiply(mat.rotateZ(c.rz), mat.multiply(mat.rotateY(c.ry), mat.scale(c.s)));
@@ -202,6 +201,13 @@ function createGLRenderer(stage) {
 
   const shadow = (mvp) => { drawQuad('front', mvp, null, 1, 1); drawQuad('back', mvp, null, 1, 1); }; // se ve desde cualquier lado
 
+  // esquinas de una carta en pantalla (para detectar el ratón)
+  const project = (mvp) => [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]].map(([x, y]) => {
+    const v = mat.multiply(mvp, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, 0, 1]);
+    const w = v[15];
+    return [((v[12] / w) * 0.5 + 0.5) * W, (1 - ((v[13] / w) * 0.5 + 0.5)) * H];
+  });
+
   return {
     kind: 'webgl',
     canvas,
@@ -224,11 +230,13 @@ function createGLRenderer(stage) {
       const backUv = coverScale(aspectOf(frame.back));
       // Mazo: unas cuantas cartas apiladas
       const layers = Math.min(5, Math.ceil(frame.pile.count / 12));
+      pileQuad = null;
       if (frame.pile.count > 0) {
         for (let i = layers - 1; i >= 0; i--) {
           const c = { ...frame.pile.cur, z: frame.pile.cur.z - i * 0.012, x: frame.pile.cur.x + i * 0.004, y: frame.pile.cur.y - i * 0.006 };
           if (i === layers - 1) shadow(mat.multiply(pv, modelOf(c, 0.02, -0.025, -0.003)));
           drawQuad('back', mat.multiply(pv, modelOf(c)), backTex, 0.95, 0, backUv);
+          if (i === 0) pileQuad = { key: 'pile', pts: project(mat.multiply(pv, modelOf(c))), z: -1 };
         }
       }
       quads = [];
@@ -239,20 +247,14 @@ function createGLRenderer(stage) {
         shadow(mat.multiply(pv, modelOf(card.cur, 0.035 * card.cur.s, -0.045 * card.cur.s, -0.004)));
         drawQuad('front', mvp, texFor(card.front), card.cur.dim, 0, coverScale(aspectOf(card.front)));
         drawQuad('back', mvp, backTex, card.cur.dim, 0, backUv);
-        // esquinas en pantalla para detectar el ratón
-        const pts = [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]].map(([x, y]) => {
-          const v = mat.multiply(mat.multiply(pv, model), [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, 0, 1]);
-          const w = v[15];
-          return [((v[12] / w) * 0.5 + 0.5) * W, (1 - ((v[13] / w) * 0.5 + 0.5)) * H];
-        });
-        quads.push({ key: card.key, pts, z: card.cur.z });
+        quads.push({ key: card.key, pts: project(mat.multiply(pv, model)), z: card.cur.z });
       }
     },
     hit(clientX, clientY) {
       const r = canvas.getBoundingClientRect();
       const px = ((clientX - r.left) / r.width) * W;
       const py = ((clientY - r.top) / r.height) * H;
-      for (const q of [...quads].sort((p, o) => o.z - p.z)) {
+      for (const q of [...quads].sort((p, o) => o.z - p.z).concat(pileQuad ? [pileQuad] : [])) {
         let sign = 0;
         let inside = true;
         for (let i = 0; i < 4; i++) {
@@ -281,7 +283,7 @@ function createCssRenderer(stage) {
   let boxW = 1;
   let boxH = 1;
   let backSrc = '';
-  const pile = el('div', { class: 'hs-card hs-pile' }, el('div', { class: 'hs-face hs-back' }));
+  const pile = el('div', { class: 'hs-card hs-pile', dataset: { key: 'pile' } }, el('div', { class: 'hs-face hs-back' }));
   root.append(pile);
   return {
     kind: 'css',
@@ -478,7 +480,7 @@ export async function openHandSimulator({ gameKey, deck }) {
           visH: layout.visH,
           back: backImg,
           backSrc,
-          pile: { cur: pileState(layout), count: sim.library.length },
+          pile: { cur: hoverKey === 'pile' ? { ...pileState(layout), s: 0.62 } : pileState(layout), count: sim.library.length },
           cards: ready.map((s) => ({ key: s.key, front: s.front, frontSrc: s.frontSrc, cur: s.cur })),
         });
       } catch (err) {
@@ -503,7 +505,7 @@ export async function openHandSimulator({ gameKey, deck }) {
     else if (rules.mulligan === 'london') bMull.textContent = sim.mulligans ? `Mulligan (llevas ${sim.mulligans})` : 'Mulligan';
     if (pending) status.textContent = `Elige ${pending} carta${pending > 1 ? 's' : ''} para poner al fondo del mazo (${selected.size}/${pending}). Doble clic para verla en grande.`;
     else if (sim.total < rules.size) status.textContent = `El mazo principal solo tiene ${sim.total} cartas.`;
-    else status.textContent = maxScroll(layout, sim.hand.length) > 0 ? 'La mano no cabe: desplázala con la rueda, arrastrando o con las flechas ← →. Clic en una carta para verla en grande.' : 'Pasa el ratón por una carta para resaltarla; clic para verla en grande.';
+    else status.textContent = maxScroll(layout, sim.hand.length) > 0 ? 'La mano no cabe: desplázala con la rueda, arrastrando o con las flechas ← →. Clic en una carta para verla en grande.' : 'Pasa el ratón por una carta para resaltarla; clic para verla en grande. Clic en el mazo para robar.';
     info.textContent = `En la mano: ${sim.hand.length} · En el mazo: ${sim.library.length}${rules.mulligan ? ` · Mulligans: ${sim.mulligans}` : ''}`;
     clear(names);
     sim.hand.forEach((c) => names.append(el('li', { text: c.name })));
@@ -587,6 +589,7 @@ export async function openHandSimulator({ gameKey, deck }) {
   stage.addEventListener('click', (e) => {
     const key = pos(e);
     if (!key || busy || dragged) return;
+    if (key === 'pile') { if (!bDraw.disabled) bDraw.click(); return; } // clic en el mazo = robar carta
     if (sim.pendingBottom > 0) {
       // elegir cartas para el fondo; el doble clic abre el visor
       clearTimeout(clickTimer);

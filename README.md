@@ -188,7 +188,7 @@ En *Mazos*, el botón **Mano inicial** abre un simulador 3D (WebGL, o CSS 3D si 
 | Yu-Gi-Oh! | 5 cartas | No hay (*Nueva mano* baraja y reparte otra vez para practicar) |
 | Digimon | 5 cartas | Uno solo: la mano vuelve al mazo, se baraja y se roban 5 |
 
-Las cartas que robas se añaden a la derecha y, si no caben, la mano se desplaza como un abanico (rueda, arrastrar o flechas ← →). Además: *Robar carta*, *Nueva mano*, clic en una carta para verla en el visor 3D y atajos N / M / D. Las reglas están en `public/js/hand-logic.js` (sin DOM, fácil de ajustar) y la escena en `public/js/hand-sim.js`. Usa el dorso del juego de `public/img/backs/` si existe.
+Clic en el mazo (arriba a la derecha) para robar. Las cartas que robas se añaden a la derecha y, si no caben, la mano se desplaza como un abanico (rueda, arrastrar o flechas ← →). Además: *Robar carta*, *Nueva mano*, clic en una carta para verla en el visor 3D y atajos N / M / D. Las reglas están en `public/js/hand-logic.js` (sin DOM, fácil de ajustar) y la escena en `public/js/hand-sim.js`. Usa el dorso del juego de `public/img/backs/` si existe.
 
 ### Importar y exportar (colección y mazos)
 
