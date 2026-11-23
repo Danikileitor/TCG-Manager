@@ -1041,17 +1041,4 @@
 .star-btn.on { color: #f0b44a; }
 .star-btn:focus-visible { outline: 2px solid #f0b44a; outline-offset: 2px; border-radius: 4px; }
 
-/* ---------- Barras de desplazamiento ---------- */
-.result-list, .cs-drawer-body, .tr-dialog, .tr-missing pre, .tr-text {
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: var(--border) transparent;
-}
-.result-list::-webkit-scrollbar, .cs-drawer-body::-webkit-scrollbar, .tr-dialog::-webkit-scrollbar, .tr-missing pre::-webkit-scrollbar, .tr-text::-webkit-scrollbar { width: 10px; height: 10px; }
-.result-list::-webkit-scrollbar-track, .cs-drawer-body::-webkit-scrollbar-track, .tr-dialog::-webkit-scrollbar-track, .tr-missing pre::-webkit-scrollbar-track, .tr-text::-webkit-scrollbar-track { background: transparent; }
-.result-list::-webkit-scrollbar-thumb, .cs-drawer-body::-webkit-scrollbar-thumb, .tr-dialog::-webkit-scrollbar-thumb, .tr-missing pre::-webkit-scrollbar-thumb, .tr-text::-webkit-scrollbar-thumb {
-  background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box;
-}
-.result-list::-webkit-scrollbar-thumb:hover, .cs-drawer-body::-webkit-scrollbar-thumb:hover, .tr-dialog::-webkit-scrollbar-thumb:hover, .tr-missing pre::-webkit-scrollbar-thumb:hover, .tr-text::-webkit-scrollbar-thumb:hover {
-  background: var(--accent); background-clip: padding-box;
-}
 .result-list { padding-right: 0.25rem; }

@@ -283,3 +283,14 @@ textarea:focus {
     transform: rotate(360deg);
   }
 }
+
+/* ----- Barras de desplazamiento (toda la web) ----- */
+* {
+  scrollbar-width: thin; /* Firefox y Chrome moderno */
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
