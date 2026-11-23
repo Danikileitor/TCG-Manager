@@ -67,35 +67,28 @@ function placeholderCanvas(name) {
 }
 
 // ---------------------------------------------------------------- distribución en la mesa (unidades: alto de carta = 1)
+// La mano ocupa una sola fila. La separación entre cartas se calcula para el tamaño de la mano inicial;
+// las cartas que se roban después se añaden a la derecha y, si no caben, la mano se desplaza (abanico con scroll).
 function computeLayout(aspect, n) {
-  const rows = aspect < 0.9 && n > 4 ? 2 : 1;
-  const cols = Math.ceil(n / rows);
-  let visH = rows === 1 ? 2.3 : 3.3;
+  let visH = 2.3;
   let step = 0;
-  if (cols > 1) {
-    step = Math.min(0.86, (visH * aspect * 0.9 - ASPECT) / (cols - 1));
+  if (n > 1) {
+    step = Math.min(0.86, (visH * aspect * 0.9 - ASPECT) / (n - 1));
     if (step < 0.25) {
       step = 0.25;
-      visH = ((cols - 1) * 0.25 + ASPECT) / 0.9 / aspect;
+      visH = ((n - 1) * 0.25 + ASPECT) / 0.9 / aspect;
     }
   }
-  return { rows, cols, visH, visW: visH * aspect, step };
+  return { cols: n, visH, visW: visH * aspect, step };
 }
 
-function slotTarget(i, n, L) {
-  const row = Math.floor(i / L.cols);
-  const inRow = row === L.rows - 1 ? n - L.cols * row : L.cols;
-  const off = i - L.cols * row - (inRow - 1) / 2;
-  const single = L.rows === 1;
-  return {
-    x: off * L.step,
-    y: single ? -0.22 - 0.012 * off * off : row === 0 ? 0.25 : -0.9,
-    z: i * 0.01,
-    ry: 0,
-    rz: single ? -off * 0.03 : 0,
-    s: 1,
-    dim: 1,
-  };
+const handStart = (L) => (-(L.cols - 1) * L.step) / 2;
+// Desplazamiento máximo para que la última carta quede a la vista
+const maxScroll = (L, n) => Math.max(0, handStart(L) + (n - 1) * L.step + ASPECT / 2 - L.visW * 0.47);
+
+function slotTarget(i, L, scroll) {
+  const x = handStart(L) + i * L.step - scroll;
+  return { x, y: -0.22 - 0.016 * x * x, z: i * 0.01, ry: 0, rz: -0.035 * x, s: 1, dim: 1 };
 }
 const pileState = (L) => ({ x: L.visW / 2 - 0.5, y: L.visH / 2 - 0.62, z: 0.3, ry: Math.PI, rz: 0, s: 0.55, dim: 1 });
 
@@ -104,9 +97,9 @@ const VERT = `attribute vec2 a_pos; attribute vec2 a_uv; uniform mat4 u_mvp; var
 void main(){ v_uv=a_uv; v_pos=a_pos; gl_Position=u_mvp*vec4(a_pos,0.0,1.0); }`;
 const FRAG = `precision mediump float; varying vec2 v_uv; varying vec2 v_pos; uniform sampler2D u_tex; uniform float u_dim; uniform float u_mode; uniform vec2 u_half;
 void main(){
-  vec2 q=abs(v_pos)-(u_half-vec2(0.05)); float d=length(max(q,0.0))-0.05; float m=1.0-smoothstep(-0.004,0.004,d);
+  vec2 q=abs(v_pos)-(u_half-vec2(0.05)); float d=length(max(q,0.0))-0.05; float m=1.0-smoothstep(-0.010,-0.002,d);
   if(u_mode>0.5){ gl_FragColor=vec4(0.0,0.0,0.0,0.34*m); return; }
-  vec4 t=texture2D(u_tex,v_uv); float a=t.a*m; gl_FragColor=vec4(t.rgb*u_dim*a,a);
+  vec4 t=texture2D(u_tex,v_uv); gl_FragColor=vec4(t.rgb*u_dim*m,t.a*m);
 }`;
 
 function createGLRenderer(stage) {
@@ -148,6 +141,7 @@ function createGLRenderer(stage) {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); // sin halo blanco en los bordes de los PNG con esquinas transparentes
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -290,6 +284,7 @@ function createCssRenderer(stage) {
       if (frame.backSrc !== backSrc) {
         backSrc = frame.backSrc;
         pile.firstChild.style.backgroundImage = `url("${backSrc}")`;
+        for (const node of els.values()) node.lastChild.style.backgroundImage = `url("${backSrc}")`;
       }
       pile.style.display = frame.pile.count > 0 ? '' : 'none';
       place(pile, { ...frame.pile.cur, ry: 0 });
@@ -350,6 +345,8 @@ export async function openHandSimulator({ gameKey, deck }) {
   // ----- escena -----
   let renderer = null;
   let layout = computeLayout(1.6, rules.size);
+  let scrollCur = 0;
+  let scrollTarget = 0;
   let backImg = makeGenericBack();
   let backSrc = backImg.toDataURL();
   const slots = []; // { key, inst, cur, tgt, startAt, removeAt, front, frontSrc }
@@ -370,14 +367,14 @@ export async function openHandSimulator({ gameKey, deck }) {
   function onResize() {
     if (!renderer) return;
     const { w, h } = renderer.resize();
-    layout = computeLayout(w / Math.max(1, h), Math.max(sim.hand.length, rules.size));
+    layout = computeLayout(w / Math.max(1, h), rules.size);
     retarget();
   }
   const ro = new ResizeObserver(onResize);
   ro.observe(stage);
 
   // fondo del mazo (propio del juego si existe en /img/backs, si no el genérico)
-  (async () => {
+  const backReady = (async () => {
     try {
       const url = await findDefaultBack('');
       if (url) {
@@ -388,20 +385,19 @@ export async function openHandSimulator({ gameKey, deck }) {
   })();
 
   function retarget() {
-    const n = slots.filter((s) => !s.removing).length;
     let i = 0;
     for (const s of slots) {
       if (s.removing) continue;
-      s.tgt = slotTarget(i++, n, layout);
+      s.tgt = slotTarget(i++, layout, scrollCur);
     }
   }
 
   function applyInteraction(s, base) {
     const t = { ...base };
     if (s.key === hoverKey && !s.removing) {
-      t.y += layout.rows === 1 ? 0.2 : 0.1;
+      t.y += 0.2;
       t.z += 0.8;
-      t.s = layout.rows === 1 ? 1.3 : 1.15;
+      t.s = 1.3;
       t.rz = 0;
     }
     if (selected.has(s.key)) { t.y -= 0.3; t.dim = 0.55; }
@@ -442,6 +438,10 @@ export async function openHandSimulator({ gameKey, deck }) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const k = reduced() ? 1 : 1 - Math.exp(-dt * 9);
+    const count = slots.filter((s) => !s.removing).length;
+    scrollTarget = Math.min(Math.max(0, scrollTarget), maxScroll(layout, count));
+    scrollCur += (scrollTarget - scrollCur) * k;
+    retarget();
     for (let i = slots.length - 1; i >= 0; i--) {
       const s = slots[i];
       if (s.removing && now > s.removeAt) { slots.splice(i, 1); continue; }
@@ -480,7 +480,8 @@ export async function openHandSimulator({ gameKey, deck }) {
     if (rules.mulligan === 'redraw') bMull.textContent = sim.mulligans >= rules.maxMulligans ? 'Mulligan usado' : 'Mulligan (1 disponible)';
     else if (rules.mulligan === 'london') bMull.textContent = sim.mulligans ? `Mulligan (llevas ${sim.mulligans})` : 'Mulligan';
     if (pending) status.textContent = `Elige ${pending} carta${pending > 1 ? 's' : ''} para poner al fondo del mazo (${selected.size}/${pending}). Doble clic para verla en grande.`;
-    else status.textContent = sim.total < rules.size ? `El mazo principal solo tiene ${sim.total} cartas.` : 'Pasa el ratón por una carta para resaltarla; clic para verla en grande.';
+    else if (sim.total < rules.size) status.textContent = `El mazo principal solo tiene ${sim.total} cartas.`;
+    else status.textContent = maxScroll(layout, sim.hand.length) > 0 ? 'La mano no cabe: desplázala con la rueda, arrastrando o con las flechas ← →. Clic en una carta para verla en grande.' : 'Pasa el ratón por una carta para resaltarla; clic para verla en grande.';
     info.textContent = `En la mano: ${sim.hand.length} · En el mazo: ${sim.library.length}${rules.mulligan ? ` · Mulligans: ${sim.mulligans}` : ''}`;
     clear(names);
     sim.hand.forEach((c) => names.append(el('li', { text: c.name })));
@@ -497,6 +498,7 @@ export async function openHandSimulator({ gameKey, deck }) {
     const created = [];
     cards.forEach((c, i) => created.push(addCard(c, 120 + i * 110)));
     const done = await Promise.all(created);
+    scrollTarget = maxScroll(layout, slots.filter((s) => !s.removing).length); // se ve la última carta repartida
     await sleep(120 + cards.length * 110 + 350);
     return done;
   }
@@ -505,12 +507,14 @@ export async function openHandSimulator({ gameKey, deck }) {
     removeCards(slots.filter((s) => !s.removing));
     selected.clear();
     await sleep(420);
+    scrollTarget = 0;
     await dealHand(sim.deal());
   }
   async function doMulligan() {
     removeCards(slots.filter((s) => !s.removing));
     selected.clear();
     await sleep(420);
+    scrollTarget = 0;
     if (sim.mulligan()) await dealHand(sim.hand.slice());
   }
   async function doBottom() {
@@ -533,6 +537,26 @@ export async function openHandSimulator({ gameKey, deck }) {
     stage.style.cursor = key ? 'pointer' : 'default';
   });
   stage.addEventListener('pointerleave', () => { hoverKey = null; });
+  // Desplazar la mano: rueda, arrastrar o flechas
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    scrollTarget += (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * 0.004;
+  }, { passive: false });
+  let drag = null;
+  let dragged = false;
+  stage.addEventListener('pointerdown', (e) => {
+    dragged = false;
+    drag = { x: e.clientX, start: scrollTarget };
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (Math.abs(dx) > 6) dragged = true;
+    if (dragged) scrollTarget = drag.start - dx / (stage.getBoundingClientRect().height / layout.visH);
+  });
+  const endDrag = () => { drag = null; };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
   const openViewer = (key) => {
     const s = slots.find((x) => x.key === key);
     if (s) openCardViewer({ name: s.inst.name, imageUrl: s.inst.imageUrl, imageBack: s.inst.imageBack, backKind: s.inst.backKind });
@@ -540,7 +564,7 @@ export async function openHandSimulator({ gameKey, deck }) {
   let clickTimer = 0;
   stage.addEventListener('click', (e) => {
     const key = pos(e);
-    if (!key || busy) return;
+    if (!key || busy || dragged) return;
     if (sim.pendingBottom > 0) {
       // elegir cartas para el fondo; el doble clic abre el visor
       clearTimeout(clickTimer);
@@ -557,7 +581,9 @@ export async function openHandSimulator({ gameKey, deck }) {
   });
   dialog.addEventListener('keydown', (e) => {
     if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-    if (e.key === 'n' || e.key === 'N') bNew.click();
+    if (e.key === 'ArrowRight') scrollTarget += 0.6;
+    else if (e.key === 'ArrowLeft') scrollTarget -= 0.6;
+    else if (e.key === 'n' || e.key === 'N') bNew.click();
     else if ((e.key === 'm' || e.key === 'M') && !bMull.disabled) bMull.click();
     else if ((e.key === 'd' || e.key === 'D') && !bDraw.disabled) bDraw.click();
   });
@@ -577,6 +603,6 @@ export async function openHandSimulator({ gameKey, deck }) {
   dialog.querySelector('.hs-controls').append(hint);
 
   refreshUi();
-  await run(async () => { await dealHand(sim.deal()); });
+  await run(async () => { await backReady; await dealHand(sim.deal()); });
   return { close, sim };
 }
