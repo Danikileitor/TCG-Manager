@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
 import { openTransferDialog } from './transfer-dialog.js';
+import { openHandSimulator } from './hand-sim.js';
 import { createCatalogSearch, resultItem } from './catalog-search.js';
 import { initCardPreview } from './card-viewer.js';
 import { markPreviewable } from './ui.js';
@@ -378,6 +379,13 @@ els.transferBtn.addEventListener('click', () => {
     getExport: currentDeckForExport,
     onImport: importDeck,
   });
+});
+
+// ---------- Mano inicial ----------
+document.getElementById('hand-btn').addEventListener('click', () => {
+  const current = currentDeckForExport();
+  if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para simular una mano', 'error');
+  openHandSimulator({ gameKey: game.key, deck: current });
 });
 
 // ---------- Eventos ----------

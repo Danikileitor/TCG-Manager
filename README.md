@@ -174,6 +174,18 @@ En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), 
 - **Cómo se guardan:** cada carta lleva un objeto `facets` (`colors`, `types`, `subtypes`, `attribute`, `cost`, `level`, `power`) que `netlify/functions/collection.js` valida y guarda. MTG y Digimon lo reciben al añadir la carta desde el catálogo; Yu-Gi-Oh! lo calcula con los archivos locales. Las cartas guardadas antes de esta versión se completan solas la primera vez que abres la colección (MTG: una petición a Scryfall por cada 75 cartas; Yu-Gi-Oh!: en local; Digimon: una consulta por carta, con pausas por el límite de la API) y se guardan con `PUT /api/collection` `{ items: [{ id, facets }] }`. Mientras tanto, esas cartas no aparecen al filtrar por datos de la carta.
 - El listado de la colección carga hasta 5.000 cartas por juego.
 
+### Mano inicial
+
+En *Mazos*, el botón **Mano inicial** abre un simulador 3D (WebGL, o CSS 3D si el servidor de imágenes no permite leerlas en WebGL) que baraja la zona principal del mazo y reparte una mano:
+
+| TCG | Mano | Mulligan |
+|---|---|---|
+| MTG | 7 cartas | Mulligan de Londres, varias veces: robas 7 nuevas y eliges tantas cartas para el fondo del mazo como mulligans lleves |
+| Yu-Gi-Oh! | 5 cartas | No hay (*Nueva mano* baraja y reparte otra vez para practicar) |
+| Digimon | 5 cartas | Uno solo: la mano vuelve al mazo, se baraja y se roban 5 |
+
+Además: *Robar carta*, *Nueva mano*, clic en una carta para verla en el visor 3D y atajos N / M / D. Las reglas están en `public/js/hand-logic.js` (sin DOM, fácil de ajustar) y la escena en `public/js/hand-sim.js`. Usa el dorso del juego de `public/img/backs/` si existe.
+
 ### Importar y exportar (colección y mazos)
 
 El botón **Importar / Exportar** está en *Mi colección* y en *Mazos*. El formato se detecta solo al importar.

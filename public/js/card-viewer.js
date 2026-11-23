@@ -48,7 +48,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // ====================================================================
 // Dorso genérico (cartas de una sola cara): se dibuja en un canvas 2D
 // ====================================================================
-function makeGenericBack() {
+export function makeGenericBack() {
   const w = 488;
   const hgt = Math.round(w / CARD_ASPECT);
   const c = document.createElement('canvas');
@@ -181,7 +181,7 @@ function currentGame() {
   }
 }
 
-async function findDefaultBack(kind) {
+export async function findDefaultBack(kind) {
   const game = currentGame();
   if (!/^[a-z0-9-]+$/.test(game)) return '';
   // Algunos tipos de carta tienen un dorso distinto (p. ej. Digi-Egg de Digimon): archivo <juego>-<tipo>
@@ -205,7 +205,7 @@ async function findDefaultBack(kind) {
 // ====================================================================
 // Matemáticas mínimas de matrices 4x4 (column-major, como WebGL)
 // ====================================================================
-const mat = {
+export const mat = {
   identity: () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
   multiply(a, b) {
     const out = new Array(16).fill(0);
@@ -220,6 +220,7 @@ const mat = {
   scale: (s) => [s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1],
   rotateX: (a) => [1, 0, 0, 0, 0, Math.cos(a), Math.sin(a), 0, 0, -Math.sin(a), Math.cos(a), 0, 0, 0, 0, 1],
   rotateY: (a) => [Math.cos(a), 0, -Math.sin(a), 0, 0, 1, 0, 0, Math.sin(a), 0, Math.cos(a), 0, 0, 0, 0, 1],
+  rotateZ: (a) => [Math.cos(a), Math.sin(a), 0, 0, -Math.sin(a), Math.cos(a), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
 };
 
 // ====================================================================
