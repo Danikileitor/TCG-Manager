@@ -42,6 +42,45 @@ function loadCardImage(url) {
   return imageCache.get(url);
 }
 
+// Algunas imágenes traen un marco blanco (o transparente) alrededor de la carta. Se detecta y se recorta para que la
+// carta rellene todo su tamaño en vez de verse con el borde. Solo se recortan filas/columnas casi totalmente en blanco
+// (máx. 10 % por lado). Devuelve la propia imagen si no hay nada que recortar o si no se pueden leer sus píxeles.
+function trimBorder(img) {
+  try {
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h) return img;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const data = g.getImageData(0, 0, w, h).data;
+    const blank = (x, y) => {
+      const i = (y * w + x) * 4;
+      return data[i + 3] < 40 || (data[i] > 232 && data[i + 1] > 232 && data[i + 2] > 232);
+    };
+    const rowBlank = (y) => { let n = 0; for (let x = 0; x < w; x++) if (blank(x, y)) n++; return n / w >= 0.9; };
+    const colBlank = (x) => { let n = 0; for (let y = 0; y < h; y++) if (blank(x, y)) n++; return n / h >= 0.9; };
+    const maxX = Math.floor(w * 0.1);
+    const maxY = Math.floor(h * 0.1);
+    let top = 0; while (top < maxY && rowBlank(top)) top++;
+    let bottom = 0; while (bottom < maxY && rowBlank(h - 1 - bottom)) bottom++;
+    let left = 0; while (left < maxX && colBlank(left)) left++;
+    let right = 0; while (right < maxX && colBlank(w - 1 - right)) right++;
+    const tx = Math.max(left, right);
+    const ty = Math.max(top, bottom);
+    if (tx < 2 && ty < 2) return img;
+    const out = document.createElement('canvas');
+    out.width = w - 2 * tx;
+    out.height = h - 2 * ty;
+    out.getContext('2d').drawImage(c, tx, ty, out.width, out.height, 0, 0, out.width, out.height);
+    return out;
+  } catch (err) {
+    return img;
+  }
+}
+
 // Carta sin imagen: se dibuja el nombre
 function placeholderCanvas(name) {
   const c = document.createElement('canvas');
@@ -295,6 +334,7 @@ function createCssRenderer(stage) {
         if (!node) {
           node = el('div', { class: 'hs-card', dataset: { key: card.key } }, el('div', { class: 'hs-face hs-front' }), el('div', { class: 'hs-face hs-back' }));
           node.firstChild.style.backgroundImage = `url("${card.frontSrc}")`;
+          if (card.overscale) node.firstChild.style.backgroundSize = '106%';
           node.lastChild.style.backgroundImage = `url("${backSrc}")`;
           root.append(node);
           els.set(card.key, node);
@@ -411,9 +451,10 @@ export async function openHandSimulator({ gameKey, deck }) {
     retarget();
     const res = await loadCardImage(inst.imageUrl);
     if (res) {
-      s.front = res.img;
-      s.frontSrc = res.src;
       s.cors = res.cors;
+      s.front = res.cors ? trimBorder(res.img) : res.img;
+      s.frontSrc = s.front === res.img ? res.src : s.front.toDataURL('image/jpeg', 0.92);
+      s.overscale = !res.cors; // sin poder leer los píxeles no se puede recortar: se amplía un poco para tapar el marco
     } else {
       s.front = placeholderCanvas(inst.name);
       s.frontSrc = s.front.toDataURL();
@@ -457,7 +498,7 @@ export async function openHandSimulator({ gameKey, deck }) {
           back: backImg,
           backSrc,
           pile: { cur: pileState(layout), count: sim.library.length },
-          cards: ready.map((s) => ({ key: s.key, front: s.front, frontSrc: s.frontSrc, cur: s.cur })),
+          cards: ready.map((s) => ({ key: s.key, front: s.front, frontSrc: s.frontSrc, overscale: s.overscale, cur: s.cur })),
         });
       } catch (err) {
         if (renderer.kind === 'webgl') makeRenderer('css'); // p. ej. imagen que WebGL no puede usar
