@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog } from './card-providers.js';
+import { openTransferDialog } from './transfer-dialog.js';
 import { createCatalogSearch, resultItem } from './catalog-search.js';
 import { initCardPreview } from './card-viewer.js';
 import { markPreviewable } from './ui.js';
@@ -66,6 +67,7 @@ const els = {
   description: document.getElementById('deck-description'),
   zones: document.getElementById('zones'),
   hints: document.getElementById('hints'),
+  transferBtn: document.getElementById('transfer-btn'),
   saveBtn: document.getElementById('save-btn'),
   deleteBtn: document.getElementById('delete-btn'),
   targetZone: document.getElementById('target-zone'),
@@ -205,6 +207,9 @@ function addCardToDeck(card, zoneOverride) {
     deck.cards.push({
       cardId: card.cardId,
       name: card.name,
+      altName: card.altName || '',
+      setCode: card.setCode || '',
+      number: card.number || '',
       imageUrl: card.imageUrl || '',
       imageBack: card.imageBack || '',
       backKind: card.backKind || '',
@@ -335,6 +340,45 @@ async function runSearch() {
     els.resultList.append(el('div', { class: 'empty', text: err.message }));
   }
 }
+
+// ---------- Importar / exportar ----------
+function currentDeckForExport() {
+  if (!deck) return null;
+  return { name: els.name.value.trim() || deck.name, format: els.format.value, description: els.description.value.trim(), cards: deck.cards };
+}
+
+async function importDeck({ cards, name, deckFormat, description, onProgress }) {
+  const merged = [];
+  for (const c of cards) {
+    const zone = game.deckZones.includes(c.zone) ? c.zone : 'main';
+    const same = merged.find((m) => m.cardId === c.cardId && m.zone === zone);
+    if (same) same.quantity = Math.min(99, same.quantity + c.quantity);
+    else {
+      merged.push({
+        cardId: c.cardId, name: c.name, altName: c.altName || '', setCode: c.setCode || '', number: c.number || '',
+        imageUrl: c.imageUrl || '', imageBack: c.imageBack || '', backKind: c.backKind || '',
+        language: c.language || 'en', quantity: Math.min(99, c.quantity), zone,
+      });
+    }
+  }
+  onProgress(0, 1);
+  const { deck: saved } = await api.post('/decks', { game: game.key, name, format: deckFormat || game.formats[0], description, cards: merged });
+  dirty = false;
+  await loadDecks(saved._id);
+  showEditor(saved);
+  return `Mazo "${saved.name}" importado`;
+}
+
+els.transferBtn.addEventListener('click', () => {
+  if (dirty && !window.confirm('Tienes cambios sin guardar en el mazo abierto; al importar se abrirá el mazo nuevo y se descartarán. ¿Continuar?')) return;
+  openTransferDialog({
+    kind: 'deck',
+    gameKey: game.key,
+    deckFormats: game.formats,
+    getExport: currentDeckForExport,
+    onImport: importDeck,
+  });
+});
 
 // ---------- Eventos ----------
 els.picker.addEventListener('change', () => openDeck(els.picker.value));

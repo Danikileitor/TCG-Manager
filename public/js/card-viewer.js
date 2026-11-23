@@ -10,7 +10,7 @@
 // WebGL necesita que el servidor de la imagen permita su uso en un canvas (cabecera CORS). Si no
 // lo permite, o el navegador no tiene WebGL, se usa automáticamente la misma vista con
 // transformaciones CSS 3D, que funciona con cualquier imagen.
-import { sizedUrl, viewerUrls, imageChain } from './card-images.js';
+import { sizedUrl, viewerUrls, imageChain, betterImageUrl } from './card-images.js';
 
 const CARD_ASPECT = 63 / 88; // proporción de una carta (ancho / alto)
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -113,6 +113,12 @@ async function loadCardImage(small, { cors }) {
       return await loadImage(url, { cors });
     } catch (err) {
       lastError = err;
+      if (cors) {
+        // Si la imagen existe pero su servidor no permite leerla (CORS), no se baja a una versión peor:
+        // se falla para que la vista sin WebGL (CSS 3D) muestre esta, que es la de mayor calidad.
+        const exists = await loadImage(url, { cors: false }).then(() => true, () => false);
+        if (exists) throw err;
+      }
     }
   }
   throw lastError;
@@ -813,7 +819,7 @@ function hideTip() {
 
 function showTip(target) {
   ensureTip();
-  const small = target.dataset.cardImage;
+  const small = betterImageUrl(target.dataset.cardImage);
   const big = sizedUrl(small, 'tip');
   tipImg.onload = () => {
     if (tipTarget !== target) return;

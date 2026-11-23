@@ -473,6 +473,31 @@ export function buildScryfallQuery(query, lang, filters = {}, typeDict = null) {
   return terms.join(' ');
 }
 
+// Carta de Scryfall -> carta normalizada
+export function mtgCardFromScryfall(c, lang = 'en') {
+  const face = c.image_uris || (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris) || {};
+  // Cartas de dos caras: la segunda cara tiene su propia imagen
+  const backFace = !c.image_uris && c.card_faces && c.card_faces[1] && c.card_faces[1].image_uris;
+  const name = mtgPrintedName(c);
+  const pt = c.power !== undefined && c.toughness !== undefined ? `${c.power}/${c.toughness}` : '';
+  return {
+    cardId: c.id,
+    name,
+    altName: name !== c.name ? c.name : '', // nombre oficial en inglés, como referencia
+    imageUrl: face.small || face.normal || '',
+    imageBack: (backFace && (backFace.small || backFace.normal)) || '',
+    setCode: (c.set || '').toUpperCase(),
+    number: c.collector_number || '',
+    rarity: c.rarity || '',
+    typeLine: c.printed_type_line || c.type_line || '',
+    facets: mtgFacets(c),
+    statLine: [c.mana_cost, pt].filter(Boolean).join(' · '),
+    zoneHint: 'main',
+    language: c.lang || lang,
+    isAlt: false,
+  };
+}
+
 const scryfall = {
   languages: MTG_LANGUAGES,
   note: '',
@@ -499,28 +524,7 @@ const scryfall = {
           : '';
       return { cards: [], hasMore: false, total: 0, emptyNote };
     }
-    const cards = data.data.map((c) => {
-      const face = c.image_uris || (c.card_faces && c.card_faces[0] && c.card_faces[0].image_uris) || {};
-      // Cartas de dos caras: la segunda cara tiene su propia imagen
-      const backFace = !c.image_uris && c.card_faces && c.card_faces[1] && c.card_faces[1].image_uris;
-      const name = mtgPrintedName(c);
-      const pt = c.power !== undefined && c.toughness !== undefined ? `${c.power}/${c.toughness}` : '';
-      return {
-        cardId: c.id,
-        name,
-        altName: name !== c.name ? c.name : '', // nombre oficial en inglés, como referencia
-        imageUrl: face.small || face.normal || '',
-        imageBack: (backFace && (backFace.small || backFace.normal)) || '',
-        setCode: (c.set || '').toUpperCase(),
-        rarity: c.rarity || '',
-        typeLine: c.printed_type_line || c.type_line || '',
-        facets: mtgFacets(c),
-        statLine: [c.mana_cost, pt].filter(Boolean).join(' · '),
-        zoneHint: 'main',
-        language: c.lang || lang,
-        isAlt: false,
-      };
-    });
+    const cards = data.data.map((c) => mtgCardFromScryfall(c, lang));
     return { cards, hasMore: Boolean(data.has_more), total: data.total_cards || cards.length };
   },
 };
@@ -1228,6 +1232,237 @@ async function digimonFacetsFor(cards, onProgress) {
     if (f) result.set(c.cardId, f);
   }
   return result;
+}
+
+
+// ====================================================================
+// Importación: convierte las entradas de un archivo (ver transfer.js) en cartas reales del catálogo
+// ====================================================================
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const keyName = (v) => normalizeText(String(v || '')).replace(/\s+/g, '');
+
+async function resolveMtg(entries, onProgress) {
+  const cards = new Array(entries.length).fill(null);
+  const identifier = (e, loose) => {
+    if (e.scryfallId && !loose) return { id: e.scryfallId };
+    if (/^[0-9a-f-]{36}$/i.test(e.cardId || '') && !loose) return { id: e.cardId };
+    if (e.set && e.number && !loose) return { set: e.set.toLowerCase(), collector_number: e.number };
+    if (e.set && e.name && !loose) return { name: e.name.split(' // ')[0], set: e.set.toLowerCase() };
+    return { name: String(e.name || '').split(' // ')[0] };
+  };
+  const matches = (e, c) => {
+    if (e.scryfallId && c.id === e.scryfallId) return true;
+    if (/^[0-9a-f-]{36}$/i.test(e.cardId || '') && c.id === e.cardId) return true;
+    if (e.set && e.number && String(c.set).toLowerCase() === e.set.toLowerCase() && String(c.collector_number).toLowerCase() === String(e.number).toLowerCase()) return true;
+    const n = keyName(e.name.split(' // ')[0]);
+    const front = keyName(String(c.name).split(' // ')[0]);
+    if (n && n === front && (!e.set || String(c.set).toLowerCase() === e.set.toLowerCase())) return true;
+    return false;
+  };
+  const lookup = async (indexes, loose) => {
+    for (let i = 0; i < indexes.length; i += 75) {
+      const chunk = indexes.slice(i, i + 75);
+      const valid = chunk.filter((idx) => Object.values(identifier(entries[idx], loose)).every(Boolean));
+      let res;
+      try {
+        res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ identifiers: valid.map((idx) => identifier(entries[idx], loose)) }),
+        });
+      } catch (err) {
+        throw new Error('No se pudo conectar con Scryfall. Revisa tu conexión e inténtalo de nuevo');
+      }
+      if (!res.ok) throw new Error('Scryfall no está disponible ahora mismo');
+      const data = await res.json().catch(() => ({}));
+      for (const idx of valid) {
+        const hit = (data.data || []).find((c) => matches(entries[idx], c));
+        if (hit) cards[idx] = mtgCardFromScryfall(hit, entries[idx].language || 'en');
+      }
+      onProgress(Math.min(i + 75, indexes.length), indexes.length);
+      if (i + 75 < indexes.length) await sleep(120);
+    }
+  };
+  const all = entries.map((_, i) => i).filter((i) => entries[i].name || entries[i].cardId || entries[i].scryfallId);
+  await lookup(all, false);
+  // Segundo intento sin edición ni número para lo que no se encontró (otra impresión de la misma carta)
+  const retry = all.filter((i) => !cards[i] && entries[i].name && (entries[i].set || entries[i].number));
+  if (retry.length) await lookup(retry, true);
+  return cards;
+}
+
+async function resolveYgo(entries) {
+  const [index, details, arts] = await Promise.all([
+    loadYgoIndex('en'),
+    loadOnce('/data/ygo/details.json', 'No se pudo cargar los datos de las cartas').catch(() => ({})),
+    loadOnce('/data/ygo/arts.json', 'No se pudo cargar los artes alternativos').catch(() => ({})),
+  ]);
+  const byId = new Map(index.map((e) => [String(e.row[0]), e.row]));
+  const byName = new Map();
+  index.forEach((e) => { byName.set(keyName(e.row[1]), e.row); });
+  const owner = new Map();
+  for (const [base, list] of Object.entries(arts || {})) list.forEach((a) => owner.set(String(Array.isArray(a) ? a[0] : a), base));
+  return entries.map((e) => {
+    const id = e.cardId ? String(e.cardId) : '';
+    const row = (id && (byId.get(id) || byId.get(owner.get(id)))) || byName.get(keyName(e.name));
+    if (!row) return null;
+    const kind = YGO_KINDS[row[3]] || YGO_KINDS.m;
+    return {
+      cardId: id && owner.has(id) ? id : String(row[0]),
+      baseId: String(row[0]),
+      name: row[1],
+      altName: '',
+      imageUrl: ygoImage(row),
+      setCode: e.set || '',
+      rarity: e.rarity || '',
+      typeLine: kind.label,
+      facets: ygoFacets(row[3], details[row[0]]),
+      zoneHint: kind.zone,
+      language: 'en',
+    };
+  });
+}
+
+async function resolveDigimon(entries) {
+  return entries.map((e) => {
+    const id = String(e.cardId || '').toUpperCase();
+    if (!id) return null;
+    return {
+      cardId: id,
+      name: e.name || id,
+      altName: '',
+      imageUrl: `${DIGIMON_ALT_IMG}${id}.webp`,
+      setCode: e.set || '',
+      rarity: e.rarity || '',
+      typeLine: '',
+      facets: null,
+      zoneHint: 'main',
+      language: 'en',
+      needsName: !e.name,
+    };
+  });
+}
+
+// Completa los nombres que faltan (listas de solo números) consultando la API, una vez por carta
+async function fillDigimonNames(cards, onProgress) {
+  const todo = cards.filter((c) => c && c.needsName);
+  const bases = [...new Set(todo.map((c) => c.cardId.replace(/_P\d+$/i, '')))];
+  const found = new Map();
+  let done = 0;
+  for (const base of bases) {
+    try {
+      const list = await fetchDigimon(new URLSearchParams({ series: 'Digimon Card Game', card: base, limit: '5' }));
+      const hit = list.find((c) => String(c.id || c.cardnumber) === base);
+      if (hit) found.set(base, hit);
+    } catch (err) {
+      break;
+    }
+    onProgress(++done, bases.length);
+    await sleep(750);
+  }
+  for (const c of todo) {
+    const hit = found.get(c.cardId.replace(/_P\d+$/i, ''));
+    if (!hit) continue;
+    const type = hit.type || hit.card_type || '';
+    c.name = hit.name;
+    c.typeLine = type;
+    c.rarity = c.rarity || hit.card_rarity || hit.rarity || '';
+    c.facets = digimonFacets(hit);
+    if (/egg/i.test(type)) { c.zoneHint = 'digi-egg'; c.backKind = 'egg'; }
+    c.needsName = false;
+  }
+}
+
+// entries -> { cards: [{...carta, quantity, zone, finish, condition, language, notes}], missing: [entrada] }
+export async function resolveEntries(gameKey, entries, onProgress = () => {}) {
+  const resolved = new Array(entries.length).fill(null);
+  const pending = [];
+  entries.forEach((e, i) => {
+    // Copia de seguridad de TCG Manager: ya trae todos los datos
+    if (e.full && e.full.cardId && e.full.name) resolved[i] = { ...e.full };
+    else pending.push(i);
+  });
+  if (pending.length) {
+    const subset = pending.map((i) => entries[i]);
+    let out;
+    if (gameKey === 'mtg') out = await resolveMtg(subset, onProgress);
+    else if (gameKey === 'ygo') out = await resolveYgo(subset);
+    else {
+      out = await resolveDigimon(subset);
+      await fillDigimonNames(out, onProgress);
+    }
+    pending.forEach((i, k) => { resolved[i] = out[k]; });
+  }
+  const cards = [];
+  const missing = [];
+  entries.forEach((e, i) => {
+    const c = resolved[i];
+    if (!c) { missing.push(e); return; }
+    const { needsName, ...clean } = c;
+    cards.push({
+      ...clean,
+      quantity: e.quantity || 1,
+      zone: e.zone || clean.zone || clean.zoneHint || 'main',
+      language: e.language || clean.language || 'en',
+      finish: e.finish || clean.finish || 'normal',
+      condition: e.condition || clean.condition || 'NM',
+      notes: e.notes || clean.notes || '',
+      rarity: clean.rarity || e.rarity || '',
+      setCode: clean.setCode || (e.set || '').toUpperCase(),
+    });
+  });
+  return { cards, missing };
+}
+
+
+// Prepara las cartas para exportarlas: nombre en inglés, edición y número (lo que entienden las demás webs)
+// y, en Yu-Gi-Oh!, el código numérico de la carta (los artes alternativos tienen su propio cardId).
+export async function completeForExport(gameKey, cards, onProgress = () => {}) {
+  const out = cards.map((c) => ({ ...c }));
+  if (gameKey === 'ygo') {
+    const [index, arts] = await Promise.all([
+      loadYgoIndex('en'),
+      loadOnce('/data/ygo/arts.json', 'No se pudo cargar los artes alternativos').catch(() => ({})),
+    ]);
+    const byId = new Map(index.map((e) => [String(e.row[0]), e.row]));
+    const owner = new Map();
+    for (const [base, list] of Object.entries(arts || {})) list.forEach((a) => owner.set(String(Array.isArray(a) ? a[0] : a), base));
+    out.forEach((c) => {
+      const id = String(c.cardId);
+      const baseId = byId.has(id) ? id : owner.get(id);
+      const row = baseId && byId.get(baseId);
+      if (!row) return;
+      c.baseId = baseId;
+      if (c.language !== 'en' || !c.altName) c.altName = row[1];
+    });
+  } else if (gameKey === 'mtg') {
+    const todo = out.filter((c) => /^[0-9a-f-]{36}$/i.test(String(c.cardId)) && (!c.number || (!c.altName && c.language !== 'en')));
+    const ids = [...new Set(todo.map((c) => c.cardId))];
+    const found = new Map();
+    for (let i = 0; i < ids.length; i += 75) {
+      try {
+        const res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ identifiers: ids.slice(i, i + 75).map((id) => ({ id })) }),
+        });
+        if (!res.ok) break;
+        ((await res.json()).data || []).forEach((c) => found.set(c.id, c));
+      } catch (err) {
+        break;
+      }
+      onProgress(Math.min(i + 75, ids.length), ids.length);
+      if (i + 75 < ids.length) await sleep(120);
+    }
+    todo.forEach((c) => {
+      const hit = found.get(c.cardId);
+      if (!hit) return;
+      c.number = c.number || hit.collector_number || '';
+      c.setCode = c.setCode || (hit.set || '').toUpperCase();
+      if (!c.altName && hit.name !== c.name) c.altName = hit.name;
+    });
+  }
+  return out;
 }
 
 // Devuelve Map(cardId -> facets) para las cartas indicadas ({cardId}); las que no se encuentran faltan en el mapa

@@ -61,6 +61,62 @@ exports.handler = async (event) => {
       return json(415, { error: 'Content-Type debe ser application/json' });
     }
 
+    // ---------- IMPORTAR varias cartas a la vez: ?bulk=1 { game, replace?, cards: [...] } ----------
+    // Suma cantidades a las variantes que ya existen (misma clave que al añadir una a una).
+    // replace: true borra antes la colección de ese TCG (el cliente solo lo envía en el primer lote).
+    if (method === 'POST' && qs.bulk) {
+      const body = parseBody(event);
+      if (!body || !Array.isArray(body.cards)) return json(400, { error: 'JSON inválido' });
+      const game = str(body.game);
+      if (!VALID_GAME_KEYS.includes(game)) return json(400, { error: 'TCG no válido' });
+      if (body.cards.length > 500) return json(400, { error: 'Máximo 500 cartas por lote' });
+
+      let removed = 0;
+      if (body.replace === true) removed = (await col.deleteMany({ userId: user.id, game })).deletedCount;
+
+      const now = new Date();
+      const ops = [];
+      for (const c of body.cards) {
+        const cardId = str(c && c.cardId, 100);
+        const name = str(c && c.name, 200);
+        if (!cardId || !name) continue;
+        const key = {
+          userId: user.id,
+          game,
+          cardId,
+          language: VALID_LANGUAGES.includes(c.language) ? c.language : 'en',
+          finish: FINISHES.includes(c.finish) ? c.finish : 'normal',
+          condition: CONDITIONS.includes(c.condition) ? c.condition : 'NM',
+        };
+        const facets = sanitizeFacets(c.facets);
+        ops.push({
+          updateOne: {
+            filter: key,
+            update: {
+              $inc: { quantity: Math.max(1, Math.min(999, parseInt(c.quantity, 10) || 1)) },
+              $set: {
+                name,
+                imageUrl: str(c.imageUrl, 500),
+                imageBack: str(c.imageBack, 500),
+                backKind: str(c.backKind, 20),
+                setCode: str(c.setCode, 30),
+                ...(str(c.altName, 200) ? { altName: str(c.altName, 200) } : {}),
+                ...(str(c.number, 20) ? { number: str(c.number, 20) } : {}),
+                rarity: str(c.rarity, 50),
+                ...(str(c.notes, 500) ? { notes: str(c.notes, 500) } : {}),
+                ...(facets ? { facets } : {}),
+                updatedAt: now,
+              },
+              $setOnInsert: { acquiredAt: now },
+            },
+            upsert: true,
+          },
+        });
+      }
+      if (ops.length) await col.bulkWrite(ops, { ordered: false });
+      return json(200, { imported: ops.length, removed });
+    }
+
     // ---------- AÑADIR (suma cantidad si ya existe la misma variante) ----------
     if (method === 'POST') {
       const body = parseBody(event);
@@ -92,6 +148,8 @@ exports.handler = async (event) => {
             imageBack: str(body.imageBack, 500),
             backKind: str(body.backKind, 20),
             setCode: str(body.setCode, 30),
+            ...(str(body.altName, 200) ? { altName: str(body.altName, 200) } : {}),
+            ...(str(body.number, 20) ? { number: str(body.number, 20) } : {}),
             rarity: str(body.rarity, 50),
             notes: str(body.notes, 500),
             ...(sanitizeFacets(body.facets) ? { facets: sanitizeFacets(body.facets) } : {}),

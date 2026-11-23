@@ -17,6 +17,9 @@ function sanitizeCards(cards, game) {
   return cards.slice(0, 300).map((c) => ({
     cardId: str(c.cardId, 100),
     name: str(c.name, 200),
+    altName: str(c.altName, 200),
+    setCode: str(c.setCode, 30),
+    number: str(c.number, 20),
     imageUrl: str(c.imageUrl, 500),
     imageBack: str(c.imageBack, 500),
     backKind: str(c.backKind, 20),

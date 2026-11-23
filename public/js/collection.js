@@ -8,6 +8,7 @@ import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
 import { createCollectionFilters, matchesFilters, matchesName, sortCards, SORTS } from './collection-filters.js';
 import { facetsForCards } from './card-providers.js';
+import { openTransferDialog } from './transfer-dialog.js';
 
 const collectionGrid = document.getElementById('collection-grid');
 const resultList = document.getElementById('result-list');
@@ -162,6 +163,8 @@ async function addFromCatalog(result) {
       game: game.key,
       cardId: result.cardId,
       name: result.name,
+      altName: result.altName || '',
+      number: result.number || '',
       imageUrl: result.imageUrl,
       imageBack: result.imageBack || '',
       backKind: result.backKind || '',
@@ -191,6 +194,26 @@ function buildCatalogSearch() {
     renderAction: (card) => el('button', { class: 'btn btn-sm', type: 'button', text: 'Añadir', onClick: () => addFromCatalog(card) }),
   });
 }
+
+document.getElementById('transfer-btn').addEventListener('click', () => {
+  openTransferDialog({
+    kind: 'collection',
+    gameKey: game.key,
+    hasVisibleFilter: () => visibleCards().length !== cards.length,
+    getExport: (onlyVisible) => (onlyVisible ? visibleCards() : cards),
+    onImport: async ({ cards: incoming, replace, onProgress }) => {
+      let imported = 0;
+      for (let i = 0; i < incoming.length; i += 400) {
+        const chunk = incoming.slice(i, i + 400);
+        await api.post('/collection?bulk=1', { game: game.key, replace: replace && i === 0, cards: chunk });
+        imported += chunk.length;
+        onProgress(imported, incoming.length);
+      }
+      await loadCollection();
+      return `${imported} cartas importadas`;
+    },
+  });
+});
 
 filterInput.addEventListener('input', debounce(renderCollection, 200));
 sortSelect.addEventListener('change', renderCollection);

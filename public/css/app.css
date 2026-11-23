@@ -993,3 +993,20 @@
 #filters-active .cs-active { margin: -0.4rem 0 0.8rem; }
 .enrich-status { font-size: 0.85rem; margin: -0.2rem 0 0.8rem; }
 .toolbar #filters-mount { display: inline-flex; align-items: center; }
+
+/* ---------- Importar / exportar ---------- */
+.tr-dialog { width: min(720px, 94vw); max-height: 90vh; overflow: auto; background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; box-shadow: var(--shadow); }
+.tr-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.tr-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.tr-head h2 { margin: 0; font-size: 1.15rem; }
+.tr-tabs { display: flex; gap: 0.25rem; margin: 0.75rem 0; border-bottom: 1px solid var(--border); }
+.tr-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 0.5rem 0.9rem; cursor: pointer; font: inherit; }
+.tr-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.tr-pane { display: flex; flex-direction: column; gap: 0.6rem; }
+.tr-text { width: 100%; min-height: 8rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; resize: vertical; }
+.tr-info { font-size: 0.85rem; }
+.tr-error { color: var(--danger); margin: 0; }
+.tr-report p { margin: 0.25rem 0; }
+.tr-missing pre { max-height: 10rem; overflow: auto; background: var(--bg-card); padding: 0.5rem; border-radius: 8px; font-size: 0.8rem; }
+.tr-options { display: flex; flex-direction: column; gap: 0.5rem; }
+.tr-options .check, .tr-visible { display: flex; gap: 0.5rem; align-items: center; }

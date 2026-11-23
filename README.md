@@ -174,6 +174,22 @@ En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), 
 - **Cómo se guardan:** cada carta lleva un objeto `facets` (`colors`, `types`, `subtypes`, `attribute`, `cost`, `level`, `power`) que `netlify/functions/collection.js` valida y guarda. MTG y Digimon lo reciben al añadir la carta desde el catálogo; Yu-Gi-Oh! lo calcula con los archivos locales. Las cartas guardadas antes de esta versión se completan solas la primera vez que abres la colección (MTG: una petición a Scryfall por cada 75 cartas; Yu-Gi-Oh!: en local; Digimon: una consulta por carta, con pausas por el límite de la API) y se guardan con `PUT /api/collection` `{ items: [{ id, facets }] }`. Mientras tanto, esas cartas no aparecen al filtrar por datos de la carta.
 - El listado de la colección carga hasta 5.000 cartas por juego.
 
+### Importar y exportar (colección y mazos)
+
+El botón **Importar / Exportar** está en *Mi colección* y en *Mazos*. El formato se detecta solo al importar.
+
+| | Colección | Mazos |
+|---|---|---|
+| **MTG** | CSV de Moxfield, ManaBox, Archidekt y Deckbox, lista de texto (`4 Nombre (SET) 123`), CSV y JSON propios | Texto (MTG Arena / MTGO / Moxfield, con `Commander`, `Deck`, `Sideboard` o `SB:`), CSV, JSON |
+| **Yu-Gi-Oh!** | CSV, texto, JSON | `.ydk` (EDOPro, YGOPro…), enlace `ydke://`, texto, CSV, JSON |
+| **Digimon** | CSV, texto (`4 Nombre BT1-010`), JSON | Texto, lista de números (una por copia), CSV, JSON |
+
+- El **JSON de TCG Manager** es una copia completa (sin consultas al catálogo al importarlo).
+- Al importar, las cartas se buscan en el catálogo (Scryfall por id, edición + número o nombre; Yu-Gi-Oh! por código o nombre en inglés; Digimon por número) y se muestra un resumen con las que no se encontraron, que se omiten.
+- Colección: *Añadir* suma cantidades a lo que ya tienes; *Reemplazar* borra antes la colección de ese juego (pide confirmación). Mazos: la importación siempre crea un mazo nuevo.
+- Al exportar se usan los nombres en inglés y, en MTG, la edición y el número de coleccionista (si faltan en cartas antiguas, se consultan a Scryfall).
+- Código: `public/js/transfer.js` (formatos, sin red), `transfer-dialog.js` (diálogo), `resolveEntries` y `completeForExport` en `card-providers.js`, y `POST /api/collection?bulk=1` (lotes de hasta 500 cartas) en `netlify/functions/collection.js`.
+
 ### Yu-Gi-Oh!: índice de YGOJSON
 
 [YGOJSON](https://github.com/iconmaster5326/YGOJSON) no es una API de búsqueda, sino miles de cartas en archivos JSON (el agregado pesa ~110 MB). Por eso el script `scripts/build-ygo-index.mjs` genera un índice mínimo por idioma en `public/data/ygo/` (id, nombre oficial, nombre en inglés, tipo e imagen). El navegador descarga solo el del idioma elegido, la primera vez que se busca (~1 MB sin comprimir, ~0,3 MB comprimido; Netlify lo comprime y `netlify.toml` lo cachea), y busca en local sin más peticiones. Los demás archivos solo se descargan si se usan: `details.json` (atributo, tipo, nivel, ATK/DEF…) al aplicar filtros, `sets.json` y `cardsets.json` al filtrar por set, y `arts.json` al activar los artes alternativos.
