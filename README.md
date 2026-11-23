@@ -174,6 +174,10 @@ En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), 
 - **Cómo se guardan:** cada carta lleva un objeto `facets` (`colors`, `types`, `subtypes`, `attribute`, `cost`, `level`, `power`) que `netlify/functions/collection.js` valida y guarda. MTG y Digimon lo reciben al añadir la carta desde el catálogo; Yu-Gi-Oh! lo calcula con los archivos locales. Las cartas guardadas antes de esta versión se completan solas la primera vez que abres la colección (MTG: una petición a Scryfall por cada 75 cartas; Yu-Gi-Oh!: en local; Digimon: una consulta por carta, con pausas por el límite de la API) y se guardan con `PUT /api/collection` `{ items: [{ id, facets }] }`. Mientras tanto, esas cartas no aparecen al filtrar por datos de la carta.
 - El listado de la colección carga hasta 5.000 cartas por juego.
 
+### Mazos como tarjetas y carta insignia
+
+Si no hay ningún mazo abierto, *Mazos* muestra tus mazos como tarjetas (igual que la colección), con su nombre, formato y número de cartas. Clic en una tarjeta para abrirla; el desplegable sigue funcionando. La imagen de cada mazo es su **carta insignia**: en el editor, pulsa la estrella ☆ de una carta para marcarla (★); si no eliges ninguna, se usa la primera carta del mazo. Se guarda en el campo `cover` del mazo.
+
 ### Mano inicial
 
 En *Mazos*, el botón **Mano inicial** abre un simulador 3D (WebGL, o CSS 3D si el servidor de imágenes no permite leerlas en WebGL) que baraja la zona principal del mazo y reparte una mano:

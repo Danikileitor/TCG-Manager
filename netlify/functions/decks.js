@@ -29,6 +29,15 @@ function sanitizeCards(cards, game) {
   })).filter((c) => c.cardId && c.name);
 }
 
+// Carta insignia del mazo (imagen de portada): debe ser una de las cartas del mazo
+function sanitizeCover(cover, cards) {
+  if (!cover || typeof cover !== 'object') return null;
+  const cardId = str(cover.cardId, 100);
+  const inDeck = cards.find((c) => c.cardId === cardId);
+  if (!inDeck) return null;
+  return { cardId, name: inDeck.name, imageUrl: inDeck.imageUrl, imageBack: inDeck.imageBack, backKind: inDeck.backKind };
+}
+
 exports.handler = async (event) => {
   const user = getUserFromRequest(event);
   if (!user) return json(401, { error: 'No autorizado' });
@@ -55,11 +64,15 @@ exports.handler = async (event) => {
         filter.game = qs.game;
       }
       // En el listado no enviamos todas las cartas, solo un resumen
+      // (más el número de cartas y la primera carta, por si el mazo no tiene carta insignia)
       const decks = await col
-        .find(filter)
-        .project({ cards: 0 })
-        .sort({ updatedAt: -1 })
-        .limit(200)
+        .aggregate([
+          { $match: filter },
+          { $sort: { updatedAt: -1 } },
+          { $limit: 200 },
+          { $addFields: { cardCount: { $sum: '$cards.quantity' }, firstCard: { $arrayElemAt: ['$cards', 0] } } },
+          { $project: { cards: 0, 'firstCard.language': 0, 'firstCard.quantity': 0, 'firstCard.zone': 0 } },
+        ])
         .toArray();
       return json(200, { decks });
     }
@@ -86,10 +99,12 @@ exports.handler = async (event) => {
         format: str(body.format || 'casual', 30),
         description: str(body.description, 1000),
         cards: sanitizeCards(body.cards, game),
+        cover: null,
         isPublic: false,
         createdAt: now,
         updatedAt: now,
       };
+      doc.cover = sanitizeCover(body.cover, doc.cards);
       const result = await col.insertOne(doc);
       return json(201, { deck: { ...doc, _id: result.insertedId } });
     }
@@ -111,6 +126,10 @@ exports.handler = async (event) => {
       if (body.format !== undefined) update.format = str(body.format, 30);
       if (body.description !== undefined) update.description = str(body.description, 1000);
       if (body.cards !== undefined) update.cards = sanitizeCards(body.cards, existing.game);
+      if (body.cover !== undefined || body.cards !== undefined) {
+        // La carta insignia se mantiene mientras siga en el mazo
+        update.cover = sanitizeCover(body.cover !== undefined ? body.cover : existing.cover, update.cards || existing.cards);
+      }
 
       const result = await col.findOneAndUpdate(
         { _id: existing._id, userId: user.id },

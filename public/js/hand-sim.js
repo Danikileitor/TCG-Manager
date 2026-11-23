@@ -42,43 +42,17 @@ function loadCardImage(url) {
   return imageCache.get(url);
 }
 
-// Algunas imágenes traen un marco blanco (o transparente) alrededor de la carta. Se detecta y se recorta para que la
-// carta rellene todo su tamaño en vez de verse con el borde. Solo se recortan filas/columnas casi totalmente en blanco
-// (máx. 10 % por lado). Devuelve la propia imagen si no hay nada que recortar o si no se pueden leer sus píxeles.
-function trimBorder(img) {
-  try {
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
-    if (!w || !h) return img;
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(img, 0, 0);
-    const data = g.getImageData(0, 0, w, h).data;
-    const blank = (x, y) => {
-      const i = (y * w + x) * 4;
-      return data[i + 3] < 40 || (data[i] > 232 && data[i + 1] > 232 && data[i + 2] > 232);
-    };
-    const rowBlank = (y) => { let n = 0; for (let x = 0; x < w; x++) if (blank(x, y)) n++; return n / w >= 0.9; };
-    const colBlank = (x) => { let n = 0; for (let y = 0; y < h; y++) if (blank(x, y)) n++; return n / h >= 0.9; };
-    const maxX = Math.floor(w * 0.1);
-    const maxY = Math.floor(h * 0.1);
-    let top = 0; while (top < maxY && rowBlank(top)) top++;
-    let bottom = 0; while (bottom < maxY && rowBlank(h - 1 - bottom)) bottom++;
-    let left = 0; while (left < maxX && colBlank(left)) left++;
-    let right = 0; while (right < maxX && colBlank(w - 1 - right)) right++;
-    const tx = Math.max(left, right);
-    const ty = Math.max(top, bottom);
-    if (tx < 2 && ty < 2) return img;
-    const out = document.createElement('canvas');
-    out.width = w - 2 * tx;
-    out.height = h - 2 * ty;
-    out.getContext('2d').drawImage(c, tx, ty, out.width, out.height, 0, 0, out.width, out.height);
-    return out;
-  } catch (err) {
-    return img;
-  }
+// Proporción de una imagen (ancho / alto); la textura se ajusta a la carta en modo "cover" (sin recortar el marco,
+// solo lo que sobre si la proporción de la imagen no es la de la carta)
+const aspectOf = (src) => {
+  const w = src.naturalWidth || src.width;
+  const h = src.naturalHeight || src.height;
+  return w && h ? w / h : ASPECT;
+};
+// Escala de UV para que la imagen cubra toda la carta
+function coverScale(imgAspect) {
+  if (Math.abs(imgAspect - ASPECT) < 0.01) return [1, 1];
+  return imgAspect > ASPECT ? [ASPECT / imgAspect, 1] : [1, imgAspect / ASPECT];
 }
 
 // Carta sin imagen: se dibuja el nombre
@@ -134,11 +108,11 @@ const pileState = (L) => ({ x: L.visW / 2 - 0.5, y: L.visH / 2 - 0.62, z: 0.3, r
 // ---------------------------------------------------------------- renderizador WebGL
 const VERT = `attribute vec2 a_pos; attribute vec2 a_uv; uniform mat4 u_mvp; varying vec2 v_uv; varying vec2 v_pos;
 void main(){ v_uv=a_uv; v_pos=a_pos; gl_Position=u_mvp*vec4(a_pos,0.0,1.0); }`;
-const FRAG = `precision mediump float; varying vec2 v_uv; varying vec2 v_pos; uniform sampler2D u_tex; uniform float u_dim; uniform float u_mode; uniform vec2 u_half;
+const FRAG = `precision mediump float; varying vec2 v_uv; varying vec2 v_pos; uniform sampler2D u_tex; uniform float u_dim; uniform float u_mode; uniform vec2 u_half; uniform vec2 u_uv;
 void main(){
   vec2 q=abs(v_pos)-(u_half-vec2(0.05)); float d=length(max(q,0.0))-0.05; float m=1.0-smoothstep(-0.010,-0.002,d);
   if(u_mode>0.5){ gl_FragColor=vec4(0.0,0.0,0.0,0.34*m); return; }
-  vec4 t=texture2D(u_tex,v_uv); gl_FragColor=vec4(t.rgb*u_dim*m,t.a*m);
+  vec4 t=texture2D(u_tex,(v_uv-0.5)*u_uv+0.5); gl_FragColor=vec4(t.rgb*u_dim*m,t.a*m);
 }`;
 
 function createGLRenderer(stage) {
@@ -160,7 +134,7 @@ function createGLRenderer(stage) {
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('No se pudo preparar WebGL');
   gl.useProgram(prog);
   const loc = { pos: gl.getAttribLocation(prog, 'a_pos'), uv: gl.getAttribLocation(prog, 'a_uv') };
-  const uni = Object.fromEntries(['u_mvp', 'u_tex', 'u_dim', 'u_mode', 'u_half'].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  const uni = Object.fromEntries(['u_mvp', 'u_tex', 'u_dim', 'u_mode', 'u_half', 'u_uv'].map((n) => [n, gl.getUniformLocation(prog, n)]));
 
   const a = ASPECT / 2;
   const mk = (data) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW); return b; };
@@ -202,7 +176,7 @@ function createGLRenderer(stage) {
     m = mat.multiply(mat.translate(c.x + dx, c.y + dy, c.z + dz), m);
     return m;
   }
-  function drawQuad(side, mvp, tex, dim, mode) {
+  function drawQuad(side, mvp, tex, dim, mode, uv = [1, 1]) {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers[side]);
     gl.enableVertexAttribArray(loc.pos);
     gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 16, 0);
@@ -214,6 +188,7 @@ function createGLRenderer(stage) {
     gl.uniform1f(uni.u_dim, dim);
     gl.uniform1f(uni.u_mode, mode);
     gl.uniform2f(uni.u_half, a, 0.5);
+    gl.uniform2f(uni.u_uv, uv[0], uv[1]);
     gl.uniformMatrix4fv(uni.u_mvp, false, new Float32Array(mvp));
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
@@ -239,13 +214,14 @@ function createGLRenderer(stage) {
       const dist = frame.visH / 2 / Math.tan(FOV / 2);
       const pv = mat.multiply(mat.perspective(FOV, W / H, 0.1, 60), mat.translate(0, 0, -dist));
       const backTex = texFor(frame.back);
+      const backUv = coverScale(aspectOf(frame.back));
       // Mazo: unas cuantas cartas apiladas
       const layers = Math.min(5, Math.ceil(frame.pile.count / 12));
       if (frame.pile.count > 0) {
         for (let i = layers - 1; i >= 0; i--) {
           const c = { ...frame.pile.cur, z: frame.pile.cur.z - i * 0.012, x: frame.pile.cur.x + i * 0.004, y: frame.pile.cur.y - i * 0.006 };
           if (i === layers - 1) shadow(mat.multiply(pv, modelOf(c, 0.02, -0.025, -0.003)));
-          drawQuad('back', mat.multiply(pv, modelOf(c)), backTex, 0.95, 0);
+          drawQuad('back', mat.multiply(pv, modelOf(c)), backTex, 0.95, 0, backUv);
         }
       }
       quads = [];
@@ -254,8 +230,8 @@ function createGLRenderer(stage) {
         const model = modelOf(card.cur);
         const mvp = mat.multiply(pv, model);
         shadow(mat.multiply(pv, modelOf(card.cur, 0.035 * card.cur.s, -0.045 * card.cur.s, -0.004)));
-        drawQuad('front', mvp, texFor(card.front), card.cur.dim, 0);
-        drawQuad('back', mvp, backTex, card.cur.dim, 0);
+        drawQuad('front', mvp, texFor(card.front), card.cur.dim, 0, coverScale(aspectOf(card.front)));
+        drawQuad('back', mvp, backTex, card.cur.dim, 0, backUv);
         // esquinas en pantalla para detectar el ratón
         const pts = [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]].map(([x, y]) => {
           const v = mat.multiply(mat.multiply(pv, model), [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, 0, 1]);
@@ -334,7 +310,6 @@ function createCssRenderer(stage) {
         if (!node) {
           node = el('div', { class: 'hs-card', dataset: { key: card.key } }, el('div', { class: 'hs-face hs-front' }), el('div', { class: 'hs-face hs-back' }));
           node.firstChild.style.backgroundImage = `url("${card.frontSrc}")`;
-          if (card.overscale) node.firstChild.style.backgroundSize = '106%';
           node.lastChild.style.backgroundImage = `url("${backSrc}")`;
           root.append(node);
           els.set(card.key, node);
@@ -452,9 +427,8 @@ export async function openHandSimulator({ gameKey, deck }) {
     const res = await loadCardImage(inst.imageUrl);
     if (res) {
       s.cors = res.cors;
-      s.front = res.cors ? trimBorder(res.img) : res.img;
-      s.frontSrc = s.front === res.img ? res.src : s.front.toDataURL('image/jpeg', 0.92);
-      s.overscale = !res.cors; // sin poder leer los píxeles no se puede recortar: se amplía un poco para tapar el marco
+      s.front = res.img;
+      s.frontSrc = res.src;
     } else {
       s.front = placeholderCanvas(inst.name);
       s.frontSrc = s.front.toDataURL();
@@ -498,7 +472,7 @@ export async function openHandSimulator({ gameKey, deck }) {
           back: backImg,
           backSrc,
           pile: { cur: pileState(layout), count: sim.library.length },
-          cards: ready.map((s) => ({ key: s.key, front: s.front, frontSrc: s.frontSrc, overscale: s.overscale, cur: s.cur })),
+          cards: ready.map((s) => ({ key: s.key, front: s.front, frontSrc: s.frontSrc, cur: s.cur })),
         });
       } catch (err) {
         if (renderer.kind === 'webgl') makeRenderer('css'); // p. ej. imagen que WebGL no puede usar

@@ -8,7 +8,8 @@ import { createCatalogSearch, resultItem } from './catalog-search.js';
 import { initCardPreview } from './card-viewer.js';
 import { markPreviewable } from './ui.js';
 import { setupLanguageSelect, langShort } from './language.js';
-import { el, clear, toast, debounce } from './ui.js';
+import { el, clear, toast, debounce, withImageFallback, safeImageUrl } from './ui.js';
+import { betterImageUrl } from './card-images.js';
 
 // Etiqueta con el idioma de una carta (ES, EN, FR...)
 function langBadge(code) {
@@ -63,6 +64,7 @@ const els = {
   newBtn: document.getElementById('new-deck-btn'),
   editor: document.getElementById('editor'),
   emptyState: document.getElementById('empty-state'),
+  deckGrid: document.getElementById('deck-grid'),
   name: document.getElementById('deck-name'),
   format: document.getElementById('deck-format'),
   description: document.getElementById('deck-description'),
@@ -119,7 +121,7 @@ function showEditor(newDeck) {
   dirty = false;
   els.saveBtn.textContent = 'Guardar mazo';
   els.editor.classList.toggle('hidden', !deck);
-  els.emptyState.classList.toggle('hidden', !!deck);
+  renderDeckGrid();
   if (!deck) return;
 
   els.name.value = deck.name;
@@ -135,6 +137,36 @@ function newDeck() {
   showEditor({ name: 'Mazo nuevo', format: game.formats[0], description: '', cards: [] });
   els.name.focus();
   els.name.select();
+}
+
+// ---------- Mazos disponibles (cuando no hay ninguno abierto) ----------
+// Imagen de cada mazo: su carta insignia (★) o, si no tiene, la primera carta
+function deckTile(d) {
+  const cover = d.cover || d.firstCard || null;
+  const src = cover ? betterImageUrl(safeImageUrl(cover.imageUrl)) : '';
+  const box = el('div', { class: 'thumb' });
+  if (src) {
+    const img = el('img', { src, alt: cover.name, loading: 'lazy', referrerpolicy: 'no-referrer' });
+    withImageFallback(img, () => { img.remove(); box.textContent = d.name; });
+    box.append(img);
+  } else {
+    box.textContent = d.name;
+  }
+  const open = () => { els.picker.value = d._id; openDeck(d._id); };
+  return el(
+    'article',
+    { class: 'tcg-card deck-tile', tabindex: '0', role: 'button', 'aria-label': `Abrir el mazo ${d.name}`, onClick: open, onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } },
+    box,
+    el('div', { class: 'info' }, el('div', { class: 'name', text: d.name }), el('div', { class: 'meta', text: [d.format, `${d.cardCount || 0} cartas`].filter(Boolean).join(' · ') }))
+  );
+}
+
+function renderDeckGrid() {
+  const show = !deck;
+  els.deckGrid.classList.toggle('hidden', !show || decks.length === 0);
+  els.emptyState.classList.toggle('hidden', !show || decks.length > 0);
+  clear(els.deckGrid);
+  if (show) decks.forEach((d) => els.deckGrid.append(deckTile(d)));
 }
 
 // ---------- Cartas del mazo ----------
@@ -154,10 +186,21 @@ function renderZones() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .forEach((card) => {
         const minus = el('button', { type: 'button', text: '−', 'aria-label': 'Quitar una copia', onClick: () => changeQty(card, -1) });
+        const isCover = Boolean(deck.cover && deck.cover.cardId === card.cardId);
+        const star = el('button', {
+          type: 'button',
+          class: `star-btn${isCover ? ' on' : ''}`,
+          text: isCover ? '★' : '☆',
+          title: isCover ? 'Es la carta insignia del mazo (clic para quitarla)' : 'Usar como carta insignia del mazo',
+          'aria-label': isCover ? 'Quitar carta insignia' : 'Marcar como carta insignia',
+          'aria-pressed': String(isCover),
+          onClick: () => setCover(isCover ? null : card),
+        });
         list.append(
           el(
             'div',
             { class: 'deck-row' },
+            star,
             markPreviewable(el('span', { class: 'deck-name' }, card.name, langBadge(card.language)), card),
             el(
               'span',
@@ -231,8 +274,15 @@ function changeQty(card, delta) {
   renderZones();
 }
 
+function setCover(card) {
+  deck.cover = card ? { cardId: card.cardId, name: card.name, imageUrl: card.imageUrl || '', imageBack: card.imageBack || '', backKind: card.backKind || '' } : null;
+  markDirty();
+  renderZones();
+}
+
 function removeCard(card) {
   deck.cards = deck.cards.filter((c) => c !== card);
+  if (deck.cover && !deck.cards.some((c) => c.cardId === deck.cover.cardId)) deck.cover = null;
   markDirty();
   renderZones();
 }
@@ -244,6 +294,7 @@ async function saveDeck() {
     format: els.format.value,
     description: els.description.value.trim(),
     cards: deck.cards,
+    cover: deck.cover || null,
   };
   if (!payload.name) return toast('El mazo necesita un nombre', 'error');
 
