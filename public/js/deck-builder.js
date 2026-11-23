@@ -1,7 +1,8 @@
 // Constructor de mazos (/deck-builder?game=...)
 import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
-import { searchCatalog } from './card-providers.js';
+import { searchCatalog, completeForExport, digimonVariantsFor } from './card-providers.js';
+import { displayName } from './card-labels.js';
 import { openTransferDialog } from './transfer-dialog.js';
 import { openHandSimulator } from './hand-sim.js';
 import { createCatalogSearch, resultItem } from './catalog-search.js';
@@ -52,6 +53,9 @@ function deckHints(gameKey, format, totals) {
 }
 
 // ---------- Estado ----------
+// La zona Comandante solo existe en el formato Commander
+const ZONE_FORMATS = { commander: ['commander'] };
+const zonesFor = (format) => game.deckZones.filter((z) => !ZONE_FORMATS[z] || ZONE_FORMATS[z].includes(format));
 let game = null;
 let decks = [];
 let deck = null; // { _id?, name, format, description, cards: [] }
@@ -125,10 +129,40 @@ function showEditor(newDeck) {
   if (!deck) return;
 
   els.name.value = deck.name;
+  // Formato inexistente (p. ej. el antiguo "casual"): se usa el primero del juego
+  if (!game.formats.includes(deck.format)) deck.format = game.formats[0];
+  fixCommanderZone();
   els.format.value = deck.format;
+  buildTargetZones();
   els.description.value = deck.description || '';
   els.deleteBtn.classList.toggle('hidden', !deck._id);
   renderZones();
+  completeLabels(deck);
+}
+
+// Cartas guardadas antes de existir el set / la variante (Ace, Dual): se completan en segundo plano y se repinta
+async function completeLabels(target) {
+  try {
+    if (game.key === 'mtg') {
+      const missing = target.cards.filter((c) => !c.setCode && /^[0-9a-f-]{36}$/i.test(c.cardId));
+      if (!missing.length) return;
+      const done = await completeForExport('mtg', missing);
+      done.forEach((d, i) => { missing[i].setCode = d.setCode || missing[i].setCode; missing[i].number = d.number || missing[i].number; missing[i].altName = d.altName || missing[i].altName; });
+    } else if (game.key === 'digimon') {
+      const pending = target.cards.filter((c) => c.variant === undefined || c.variant === null);
+      if (!pending.length) return;
+      await digimonVariantsFor(pending.map((c) => c.cardId), (found) => {
+        if (deck !== target) return;
+        let changed = false;
+        pending.forEach((c) => { if (found.has(c.cardId) && c.variant !== found.get(c.cardId)) { c.variant = found.get(c.cardId); changed = true; } });
+        if (changed) renderZones();
+      });
+      return;
+    } else return;
+    if (deck === target) renderZones();
+  } catch (err) {
+    // son solo etiquetas: si falla, se queda el nombre sin set
+  }
 }
 
 function newDeck() {
@@ -174,7 +208,7 @@ function renderZones() {
   clear(els.zones);
   const totals = {};
 
-  game.deckZones.forEach((zone) => {
+  zonesFor(deck.format).forEach((zone) => {
     const inZone = deck.cards.filter((c) => c.zone === zone);
     totals[zone] = inZone.reduce((sum, c) => sum + c.quantity, 0);
 
@@ -200,7 +234,7 @@ function renderZones() {
           el(
             'div',
             { class: 'deck-row' },
-            markPreviewable(el('span', { class: 'deck-name' }, card.name, langBadge(card.language)), card),
+            markPreviewable(el('span', { class: 'deck-name' }, displayName(card, game.key), langBadge(card.language)), card),
             el(
               'span',
               { class: 'qty' },
@@ -242,7 +276,7 @@ function addCardToDeck(card, zoneOverride) {
   if (!deck) return toast('Crea o selecciona un mazo primero', 'error');
 
   const wanted = zoneOverride && zoneOverride !== 'auto' ? zoneOverride : card.zoneHint || 'main';
-  const zone = game.deckZones.includes(wanted) ? wanted : 'main';
+  const zone = zonesFor(deck.format).includes(wanted) ? wanted : 'main';
 
   const existing = deck.cards.find((c) => c.cardId === card.cardId && c.zone === zone);
   if (existing) {
@@ -252,6 +286,7 @@ function addCardToDeck(card, zoneOverride) {
       cardId: card.cardId,
       name: card.name,
       altName: card.altName || '',
+      variant: card.variant || '',
       setCode: card.setCode || '',
       number: card.number || '',
       imageUrl: card.imageUrl || '',
@@ -402,7 +437,7 @@ function currentDeckForExport() {
 async function importDeck({ cards, name, deckFormat, description, onProgress }) {
   const merged = [];
   for (const c of cards) {
-    const zone = game.deckZones.includes(c.zone) ? c.zone : 'main';
+    const zone = zonesFor(deckFormat || game.formats[0]).includes(c.zone) ? c.zone : 'main';
     const same = merged.find((m) => m.cardId === c.cardId && m.zone === zone);
     if (same) same.quantity = Math.min(99, same.quantity + c.quantity);
     else {
@@ -457,9 +492,31 @@ els.searchInput.addEventListener('input', debounce(() => source === 'collection'
     if (deck) markDirty();
   })
 );
+// Fuera de Commander no hay zona Comandante: sus cartas pasan al mazo principal
+function fixCommanderZone() {
+  if (zonesFor(deck.format).includes('commander')) return false;
+  const moved = deck.cards.filter((c) => c.zone === 'commander');
+  moved.forEach((c) => {
+    const same = deck.cards.find((x) => x !== c && x.cardId === c.cardId && x.zone === 'main');
+    if (same) { same.quantity = Math.min(99, same.quantity + c.quantity); deck.cards = deck.cards.filter((x) => x !== c); } else c.zone = 'main';
+  });
+  return moved.length > 0;
+}
+
+// Zonas de destino disponibles para el formato actual
+function buildTargetZones() {
+  const prev = els.targetZone.value;
+  clear(els.targetZone);
+  els.targetZone.append(el('option', { value: 'auto', text: 'Zona: automática' }));
+  zonesFor(deck ? deck.format : game.formats[0]).forEach((z) => els.targetZone.append(el('option', { value: z, text: ZONE_LABELS[z] || z })));
+  els.targetZone.value = [...els.targetZone.options].some((o) => o.value === prev) ? prev : 'auto';
+}
+
 els.format.addEventListener('change', () => {
   if (!deck) return;
   deck.format = els.format.value;
+  if (fixCommanderZone()) toast('Las cartas del Comandante pasan al mazo principal', 'info');
+  buildTargetZones();
   markDirty();
   renderZones();
 });
@@ -473,8 +530,7 @@ window.addEventListener('beforeunload', (e) => {
 
 // ---------- Inicio ----------
 async function init() {
-  await requireSession();
-  game = await loadGame();
+  [, game] = await Promise.all([requireSession(), loadGame()]);
 
   document.getElementById('game-name').textContent = game.name;
   const key = encodeURIComponent(game.key);
@@ -483,8 +539,7 @@ async function init() {
 
   // Formatos y zonas de destino según el TCG
   game.formats.forEach((f) => els.format.append(el('option', { value: f, text: f })));
-  els.targetZone.append(el('option', { value: 'auto', text: 'Zona: automática' }));
-  game.deckZones.forEach((z) => els.targetZone.append(el('option', { value: z, text: ZONE_LABELS[z] || z })));
+  buildTargetZones();
 
   // Idioma de las cartas del catálogo
   catalogLang = setupLanguageSelect({

@@ -8,7 +8,7 @@ const DEFAULT_GAMES = [
     description: 'El TCG original. Colecciona y construye mazos Commander, Standard y más.',
     color: '#7c3aed',
     deckZones: ['main', 'side', 'commander'],
-    formats: ['standard', 'modern', 'pioneer', 'commander', 'legacy', 'vintage', 'pauper', 'casual'],
+    formats: ['standard', 'modern', 'pioneer', 'commander', 'legacy', 'vintage', 'pauper'],
     enabled: true,
     order: 1,
   },
@@ -19,7 +19,7 @@ const DEFAULT_GAMES = [
     description: 'Organiza tu colección y crea mazos con Main Deck, Extra Deck y Side Deck.',
     color: '#d97706',
     deckZones: ['main', 'extra', 'side'],
-    formats: ['advanced', 'traditional', 'speed-duel', 'casual'],
+    formats: ['advanced', 'traditional', 'speed-duel'],
     enabled: true,
     order: 2,
   },
@@ -30,7 +30,7 @@ const DEFAULT_GAMES = [
     description: 'Gestiona tus cartas y arma mazos con Digi-Egg Deck y Main Deck.',
     color: '#0891b2',
     deckZones: ['main', 'digi-egg'],
-    formats: ['standard', 'casual'],
+    formats: ['standard'],
     enabled: true,
     order: 3,
   },
@@ -57,7 +57,11 @@ async function getGames(db) {
     // Se insertan copias para no modificar DEFAULT_GAMES (insertMany añade _id)
     await col.insertMany(DEFAULT_GAMES.map((g) => ({ ...g })));
   }
-  const games = await col.find({ enabled: true }).sort({ order: 1 }).project({ _id: 0 }).toArray();
+  const games = (await col.find({ enabled: true }).sort({ order: 1 }).project({ _id: 0 }).toArray()).map((g) => ({
+    ...g,
+    // El formato "casual" ya no existe (puede seguir en juegos guardados en MongoDB antes de quitarlo)
+    formats: (g.formats || []).filter((f) => f !== 'casual'),
+  }));
   gamesCache = { games, at: Date.now() };
   return games;
 }

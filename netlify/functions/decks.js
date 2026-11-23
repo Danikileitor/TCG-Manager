@@ -18,6 +18,7 @@ function sanitizeCards(cards, game) {
     cardId: str(c.cardId, 100),
     name: str(c.name, 200),
     altName: str(c.altName, 200),
+    variant: str(c.variant, 10),
     setCode: str(c.setCode, 30),
     number: str(c.number, 20),
     imageUrl: str(c.imageUrl, 500),
@@ -27,6 +28,19 @@ function sanitizeCards(cards, game) {
     quantity: Math.max(1, Math.min(99, parseInt(c.quantity, 10) || 1)),
     zone: zones.includes(c.zone) ? c.zone : 'main',
   })).filter((c) => c.cardId && c.name);
+}
+
+// La zona Comandante solo existe en el formato Commander: en los demás las cartas pasan al mazo principal
+function fixZones(cards, format) {
+  return format === 'commander' ? cards : cards.map((c) => (c.zone === 'commander' ? { ...c, zone: 'main' } : c));
+}
+
+// Formato del mazo: debe existir en el TCG (el antiguo "casual" ya no existe: se usa el primero del juego)
+function validFormat(gameKey, value) {
+  const def = DEFAULT_GAMES.find((g) => g.key === gameKey);
+  const formats = (def && def.formats) || [];
+  const v = str(value, 30);
+  return formats.includes(v) ? v : formats[0] || v;
 }
 
 // Carta insignia del mazo (imagen de portada): debe ser una de las cartas del mazo
@@ -96,14 +110,15 @@ exports.handler = async (event) => {
         userId: user.id,
         game,
         name,
-        format: str(body.format || 'casual', 30),
+        format: validFormat(game, body.format),
         description: str(body.description, 1000),
-        cards: sanitizeCards(body.cards, game),
+        cards: [],
         cover: null,
         isPublic: false,
         createdAt: now,
         updatedAt: now,
       };
+      doc.cards = fixZones(sanitizeCards(body.cards, game), doc.format);
       doc.cover = sanitizeCover(body.cover, doc.cards);
       const result = await col.insertOne(doc);
       return json(201, { deck: { ...doc, _id: result.insertedId } });
@@ -123,9 +138,11 @@ exports.handler = async (event) => {
         if (!name) return json(400, { error: 'El mazo necesita un nombre' });
         update.name = name;
       }
-      if (body.format !== undefined) update.format = str(body.format, 30);
+      if (body.format !== undefined) update.format = validFormat(existing.game, body.format);
       if (body.description !== undefined) update.description = str(body.description, 1000);
-      if (body.cards !== undefined) update.cards = sanitizeCards(body.cards, existing.game);
+      const format = update.format || existing.format;
+      if (body.cards !== undefined) update.cards = fixZones(sanitizeCards(body.cards, existing.game), format);
+      else if (update.format) update.cards = fixZones(existing.cards || [], format);
       if (body.cover !== undefined || body.cards !== undefined) {
         // La carta insignia se mantiene mientras siga en el mazo
         update.cover = sanitizeCover(body.cover !== undefined ? body.cover : existing.cover, update.cards || existing.cards);

@@ -33,9 +33,20 @@ function buildParams(q) {
   return { params, criteria };
 }
 
+// Variante de la carta: "Ace" (cartas con Overflow / ACE) o "Dual" (cartas con dos nombres "A // B").
+// Se calcula aquí para no enviar los textos de efecto. Misma lógica que digimonVariant() de card-providers.js
+function variantOf(c) {
+  const names = [c.name, c.tcgplayer_name, c.pretty_url].filter(Boolean).join(' ');
+  const text = [c.main_effect, c.source_effect, c.alt_effect].filter(Boolean).join(' ');
+  if (/\bACE\b/i.test(names) || /overflow/i.test(text)) return 'Ace';
+  if (/\/\//.test(`${c.name || ''}${c.tcgplayer_name || ''}`) || /\bdual\b/i.test(names)) return 'Dual';
+  return '';
+}
+
 // Se queda con los campos que usa la web (la API devuelve también los textos de efecto)
 function slim(c) {
   return {
+    variant: variantOf(c),
     name: c.name,
     id: c.id || c.cardnumber,
     type: c.type,

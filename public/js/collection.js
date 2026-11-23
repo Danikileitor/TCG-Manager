@@ -164,6 +164,7 @@ async function addFromCatalog(result) {
       cardId: result.cardId,
       name: result.name,
       altName: result.altName || '',
+      variant: result.variant || '',
       number: result.number || '',
       imageUrl: result.imageUrl,
       imageBack: result.imageBack || '',
@@ -220,8 +221,7 @@ sortSelect.addEventListener('change', renderCollection);
 
 // ---------- Inicio ----------
 async function init() {
-  await requireSession();
-  game = await loadGame();
+  [, game] = await Promise.all([requireSession(), loadGame()]);
 
   document.getElementById('game-name').textContent = game.name;
   const key = encodeURIComponent(game.key);

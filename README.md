@@ -178,6 +178,14 @@ En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), 
 
 Si no hay ningún mazo abierto, *Mazos* muestra tus mazos como tarjetas (igual que la colección), con su nombre, formato y número de cartas. Clic en una tarjeta para abrirla; el desplegable sigue funcionando. La imagen de cada mazo es su **carta insignia**: en el editor, pulsa la estrella ☆ de una carta para marcarla (★); si no eliges ninguna, se usa la primera carta del mazo. Se guarda en el campo `cover` del mazo.
 
+### Nombres con set, Ace y Dual
+
+En el editor de mazos cada carta muestra su set: `Yuriko, la Sombra del Tigre CMM` (MTG) y `Examon Ace BT20`, `BeelStarmon Dual BT25` (Digimon; el set sale del número de la carta). Las variantes se detectan así: **Ace** si el nombre lo dice o la carta tiene *Overflow* en sus efectos; **Dual** si el nombre es "A // B" o dice Dual. Se guardan con la carta (`variant`); las cartas antiguas se completan en segundo plano (una consulta a la API por carta, recordada en el navegador) y las de MTG sin set se completan con Scryfall.
+
+### Formatos y zonas de los mazos
+
+El formato "casual" ya no existe (los mazos que lo tenían pasan al primer formato de su juego) y la zona **Comandante** solo aparece en el formato Commander; al cambiar a otro formato sus cartas pasan al mazo principal. La cabecera (marca) se pinta al instante y el usuario se completa cuando se confirma la sesión.
+
 ### Mano inicial
 
 En *Mazos*, el botón **Mano inicial** abre un simulador 3D (WebGL, o CSS 3D si el servidor de imágenes no permite leerlas en WebGL) que baraja la zona principal del mazo y reparte una mano:

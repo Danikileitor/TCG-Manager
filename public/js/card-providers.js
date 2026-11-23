@@ -1093,6 +1093,7 @@ const digimon = {
         setCode: Array.isArray(c.set_name) ? c.set_name[0] || '' : c.set_name || '',
         rarity: c.card_rarity || c.rarity || '',
         typeLine: type,
+        variant: digimonVariant(c),
         facets: digimonFacets(c),
         statLine: digimonLine(c),
         zoneHint: /egg/i.test(type) ? 'digi-egg' : 'main',
@@ -1132,6 +1133,45 @@ export function mtgFacets(c) {
     (right || '').trim().split(/\s+/).filter(Boolean).forEach((t) => subtypes.add(t));
   }
   return { colors, types: [...types], subtypes: [...subtypes], cost: cleanNum(c.cmc), power: cleanNum(c.power !== undefined ? c.power : faces[0] && faces[0].power) };
+}
+
+// Variante de una carta de Digimon: 'Ace' (cartas ACE, que tienen Overflow), 'Dual' (nombre "A // B") o ''.
+// Usa el campo ya calculado por el proxy (variant) o, si la API se llamó directamente, el nombre y los efectos.
+export function digimonVariant(c) {
+  if (typeof c.variant === 'string') return c.variant;
+  const names = [c.name, c.tcgplayer_name, c.pretty_url].filter(Boolean).join(' ');
+  const text = [c.main_effect, c.source_effect, c.alt_effect].filter(Boolean).join(' ');
+  if (/\bACE\b/i.test(names) || /overflow/i.test(text)) return 'Ace';
+  if (/\/\//.test(`${c.name || ''}${c.tcgplayer_name || ''}`) || /\bdual\b/i.test(names)) return 'Dual';
+  return '';
+}
+
+// Variantes (Ace / Dual) de cartas de Digimon guardadas sin ese dato: se consultan a la API una vez por carta
+// base (con pausa) y se recuerdan en el navegador. Devuelve Map(cardId -> variante) y avisa en cada hallazgo.
+export async function digimonVariantsFor(cardIds, onUpdate = () => {}) {
+  const KEY = 'tcg-digimon-variants-v1';
+  let cache = {};
+  try { cache = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (err) { cache = {}; }
+  const baseOf = (id) => String(id).replace(/_P\d+$/i, '');
+  const out = new Map();
+  const bases = [...new Set(cardIds.map(baseOf))];
+  const apply = () => { cardIds.forEach((id) => { if (baseOf(id) in cache) out.set(id, cache[baseOf(id)]); }); };
+  apply();
+  onUpdate(out);
+  for (const base of bases.filter((b) => !(b in cache))) {
+    try {
+      const list = await fetchDigimon(new URLSearchParams({ series: 'Digimon Card Game', card: base, limit: '5' }));
+      const hit = list.find((c) => String(c.id || c.cardnumber) === base);
+      cache[base] = hit ? digimonVariant(hit) : '';
+      try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (err) { /* sin almacenamiento */ }
+    } catch (err) {
+      break; // límite de la API o sin conexión: se reintentará otro día
+    }
+    apply();
+    onUpdate(out);
+    await new Promise((r) => setTimeout(r, 750));
+  }
+  return out;
 }
 
 export function digimonFacets(c) {
@@ -1365,6 +1405,7 @@ async function fillDigimonNames(cards, onProgress) {
     if (!hit) continue;
     const type = hit.type || hit.card_type || '';
     c.name = hit.name;
+    c.variant = digimonVariant(hit);
     c.typeLine = type;
     c.rarity = c.rarity || hit.card_rarity || hit.rarity || '';
     c.facets = digimonFacets(hit);

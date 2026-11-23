@@ -183,6 +183,7 @@ export function openTransferDialog(opts) {
         nameInput.value = meta.name || nameInput.value || 'Mazo importado';
         const wanted = meta.deckFormat;
         if (wanted && [...fmtImport.options].some((o) => o.value === wanted)) fmtImport.value = wanted;
+        if (cards.some((c) => c.zone === 'commander') && [...fmtImport.options].some((o) => o.value === 'commander')) fmtImport.value = 'commander';
       }
       options.classList.remove('hidden');
       importBtn.disabled = false;
