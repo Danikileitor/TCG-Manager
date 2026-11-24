@@ -335,7 +335,7 @@
 
 .deck-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr 20px auto auto auto;
   gap: 0.6rem;
   align-items: center;
   padding: 0.3rem 0.2rem;
@@ -1077,4 +1077,14 @@
 }
 .ban-banned {
   box-shadow: none;
+}
+
+.deck-row .ban-slot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+.deck-row .ban-badge {
+  position: static;
 }

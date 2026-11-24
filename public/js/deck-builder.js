@@ -263,6 +263,7 @@ function renderZones() {
             'div',
             { class: 'deck-row' },
             markPreviewable(el('span', { class: 'deck-name' }, displayName(card, game.key), langBadge(card.language)), card),
+            el('span', { class: 'ban-slot' }, badgeFor(card)), // prohibida / limitada, a la izquierda del selector de copias
             el(
               'span',
               { class: 'qty' },
