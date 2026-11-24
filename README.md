@@ -178,6 +178,20 @@ En la colección hay un cuadro de búsqueda por nombre (sin distinguir tildes), 
 
 Si no hay ningún mazo abierto, *Mazos* muestra tus mazos como tarjetas (igual que la colección), con su nombre, formato y número de cartas. Clic en una tarjeta para abrirla; el desplegable sigue funcionando. La imagen de cada mazo es su **carta insignia**: en el editor, pulsa la estrella ☆ de una carta para marcarla (★); si no eliges ninguna, se usa la primera carta del mazo. Se guarda en el campo `cover` del mazo.
 
+### Límite de copias por carta
+
+El editor de mazos no deja pasar del límite de copias (el botón "+ Mazo" avisa y el "+" de la fila se desactiva). Se cuenta por carta entre todas las zonas (Main, Extra, Side, Comandante…) y no depende de la edición ni del idioma:
+
+| TCG / formato | Límite |
+|---|---|
+| MTG (Standard, Modern, Pioneer, Legacy, Vintage, Pauper) | 4 por nombre |
+| MTG Commander | 1 por nombre |
+| MTG, excepciones | sin límite: tierras básicas y cartas como Relentless Rats; Seven Dwarves 7, Nazgûl 9 |
+| Yu-Gi-Oh! (todos los formatos) | 3 por carta |
+| Digimon | 4 por número de carta (los artes alternativos cuentan como la misma carta) |
+
+Al importar un mazo se recortan las copias que pasen del límite del formato (se avisa de cuántas). Si cambias a un formato más estricto, las copias de más no se borran: se muestra un aviso. No incluye listas de prohibidas/limitadas. Reglas en `public/js/deck-rules.js`.
+
 ### Nombres con set, Ace y Dual
 
 En el editor de mazos cada carta muestra su set: `Yuriko, la Sombra del Tigre CMM` (MTG) y `Examon Ace BT20`, `BeelStarmon Dual BT25` (Digimon; el set sale del número de la carta). Las variantes se detectan así: **Ace** si el nombre lo dice o la carta tiene *Overflow* en sus efectos; **Dual** si el nombre es "A // B" o dice Dual. Se guardan con la carta (`variant`); las cartas antiguas se completan en segundo plano (una consulta a la API por carta, recordada en el navegador) y las de MTG sin set se completan con Scryfall.

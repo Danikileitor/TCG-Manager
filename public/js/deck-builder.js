@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { requireSession, loadGame } from './session.js';
 import { searchCatalog, completeForExport, digimonVariantsFor } from './card-providers.js';
 import { displayName } from './card-labels.js';
+import { copiesLeft, copyLimit, overLimit } from './deck-rules.js';
 import { openTransferDialog } from './transfer-dialog.js';
 import { openHandSimulator } from './hand-sim.js';
 import { createCatalogSearch, resultItem } from './catalog-search.js';
@@ -240,7 +241,7 @@ function renderZones() {
               { class: 'qty' },
               minus,
               el('span', { text: `x${card.quantity}` }),
-              el('button', { type: 'button', text: '+', 'aria-label': 'Añadir una copia', onClick: () => changeQty(card, 1) })
+              el('button', { type: 'button', text: '+', 'aria-label': 'Añadir una copia', disabled: copiesLeft(game.key, deck.format, deck.cards, card) < 1, title: copiesLeft(game.key, deck.format, deck.cards, card) < 1 ? `Límite de copias alcanzado (${copyLimit(game.key, deck.format, card)})` : '', onClick: () => changeQty(card, 1) })
             ),
             star,
             el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: '✕', 'aria-label': 'Quitar del mazo', onClick: () => removeCard(card) })
@@ -265,6 +266,7 @@ function renderZones() {
 
   clear(els.hints);
   const hints = deckHints(game.key, deck.format, totals);
+  overLimit(game.key, deck.format, deck.cards).forEach((x) => hints.push(`${x.name}: ${x.count} copias (máximo ${x.limit} en ${deck.format}).`));
   if (hints.length) {
     const ul = el('ul', { class: 'hint-list' });
     hints.forEach((h) => ul.append(el('li', { text: h })));
@@ -277,6 +279,11 @@ function addCardToDeck(card, zoneOverride) {
 
   const wanted = zoneOverride && zoneOverride !== 'auto' ? zoneOverride : card.zoneHint || 'main';
   const zone = zonesFor(deck.format).includes(wanted) ? wanted : 'main';
+
+  // Límite de copias según el TCG y el formato (cuenta todas las zonas)
+  if (copiesLeft(game.key, deck.format, deck.cards, card) < 1) {
+    return toast(`${card.name}: máximo ${copyLimit(game.key, deck.format, card)} ${copyLimit(game.key, deck.format, card) === 1 ? 'copia' : 'copias'} en un mazo ${deck.format}`, 'error');
+  }
 
   const existing = deck.cards.find((c) => c.cardId === card.cardId && c.zone === zone);
   if (existing) {
@@ -302,6 +309,9 @@ function addCardToDeck(card, zoneOverride) {
 }
 
 function changeQty(card, delta) {
+  if (delta > 0 && copiesLeft(game.key, deck.format, deck.cards, card) < delta) {
+    return toast(`${card.name}: máximo ${copyLimit(game.key, deck.format, card)} ${copyLimit(game.key, deck.format, card) === 1 ? 'copia' : 'copias'} en un mazo ${deck.format}`, 'error');
+  }
   card.quantity += delta;
   if (card.quantity <= 0) return removeCard(card);
   card.quantity = Math.min(99, card.quantity);
@@ -435,25 +445,32 @@ function currentDeckForExport() {
 }
 
 async function importDeck({ cards, name, deckFormat, description, onProgress }) {
+  const format = deckFormat || game.formats[0];
   const merged = [];
+  let trimmed = 0;
   for (const c of cards) {
-    const zone = zonesFor(deckFormat || game.formats[0]).includes(c.zone) ? c.zone : 'main';
+    const zone = zonesFor(format).includes(c.zone) ? c.zone : 'main';
+    // El límite de copias del formato se respeta también al importar (cuenta todas las zonas)
+    const room = copiesLeft(game.key, format, merged, c);
+    const qty = Math.min(99, c.quantity, room);
+    trimmed += Math.min(99, c.quantity) - qty;
+    if (qty < 1) continue;
     const same = merged.find((m) => m.cardId === c.cardId && m.zone === zone);
-    if (same) same.quantity = Math.min(99, same.quantity + c.quantity);
+    if (same) same.quantity += qty;
     else {
       merged.push({
-        cardId: c.cardId, name: c.name, altName: c.altName || '', setCode: c.setCode || '', number: c.number || '',
+        cardId: c.cardId, name: c.name, altName: c.altName || '', variant: c.variant || '', setCode: c.setCode || '', number: c.number || '',
         imageUrl: c.imageUrl || '', imageBack: c.imageBack || '', backKind: c.backKind || '',
-        language: c.language || 'en', quantity: Math.min(99, c.quantity), zone,
+        language: c.language || 'en', quantity: qty, zone,
       });
     }
   }
   onProgress(0, 1);
-  const { deck: saved } = await api.post('/decks', { game: game.key, name, format: deckFormat || game.formats[0], description, cards: merged });
+  const { deck: saved } = await api.post('/decks', { game: game.key, name, format, description, cards: merged });
   dirty = false;
   await loadDecks(saved._id);
   showEditor(saved);
-  return `Mazo "${saved.name}" importado`;
+  return `Mazo "${saved.name}" importado${trimmed ? ` (${trimmed} copias omitidas por el límite del formato)` : ''}`;
 }
 
 els.transferBtn.addEventListener('click', () => {
