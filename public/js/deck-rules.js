@@ -2,7 +2,8 @@
 //   MTG: 4 por nombre (1 en Commander). Sin límite: tierras básicas y cartas que lo permiten (Relentless Rats…).
 //   Yu-Gi-Oh!: 3 por carta entre Main, Extra y Side.
 //   Digimon: 4 por número de carta (las versiones alternativas _P1, _P2… cuentan como la misma carta).
-// No incluye listas de prohibidas / limitadas.
+// Además se aplican las listas de prohibidas y limitadas del formato (banlist.js): prohibida = 0 copias.
+import { statusFor } from './banlist.js';
 const norm = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 const MTG_BASIC = /^(snow-covered )?(plains|island|swamp|mountain|forest)$|^wastes$/;
@@ -19,6 +20,12 @@ export function copyKey(gameKey, card) {
 }
 
 export function copyLimit(gameKey, format, card) {
+  const base = baseLimit(gameKey, format, card);
+  const status = statusFor(gameKey, format, card);
+  return status ? Math.min(base, status.limit) : base;
+}
+
+function baseLimit(gameKey, format, card) {
   if (gameKey === 'mtg') {
     const key = copyKey(gameKey, card);
     if (MTG_BASIC.test(key) || MTG_ANY_NUMBER.has(key)) return Infinity;

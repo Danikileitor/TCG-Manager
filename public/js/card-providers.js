@@ -491,6 +491,7 @@ export function mtgCardFromScryfall(c, lang = 'en') {
     rarity: c.rarity || '',
     typeLine: c.printed_type_line || c.type_line || '',
     facets: mtgFacets(c),
+    legalities: c.legalities || null, // prohibidas / restringidas por formato (banlist.js)
     statLine: [c.mana_cost, pt].filter(Boolean).join(' · '),
     zoneHint: 'main',
     language: c.lang || lang,

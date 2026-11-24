@@ -4,8 +4,14 @@
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["public/data/banlists.json"]
 
 # Rutas limpias de la API: /api/xxx -> /.netlify/functions/xxx
+[[redirects]]
+  from = "/api/banlists"
+  to = "/.netlify/functions/banlists"
+  status = 200
+
 [[redirects]]
   from = "/api/auth/register"
   to = "/.netlify/functions/auth-register"

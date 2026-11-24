@@ -282,7 +282,7 @@ export function langBadge(code) {
 }
 
 // Fila de un resultado del catálogo; `action` es el botón de la derecha
-export function resultItem(card, action) {
+export function resultItem(card, action, renderBadge = null) {
   let thumb = card.imageUrl
     ? markPreviewable(el('img', { src: card.imageUrl, alt: card.name, loading: 'lazy', referrerpolicy: 'no-referrer' }), card)
     : el('div', { class: 'ph' });
@@ -290,10 +290,12 @@ export function resultItem(card, action) {
   if (thumb.tagName === 'IMG') {
     withImageFallback(thumb, () => thumb.replaceWith(el('div', { class: 'ph' })));
   }
-  return el(
+  // Envoltorio de la imagen: permite superponer la insignia de prohibida / limitada en la esquina
+  const wrap = el('div', { class: 'thumb-wrap' }, thumb);
+  const item = el(
     'div',
     { class: 'result-item' },
-    thumb,
+    wrap,
     el(
       'div',
       {},
@@ -304,6 +306,17 @@ export function resultItem(card, action) {
     ),
     action
   );
+  if (renderBadge) {
+    item._card = card;
+    item._wrap = wrap;
+    item.refreshBadge = () => {
+      wrap.querySelector('.ban-badge')?.remove();
+      const badge = renderBadge(card);
+      if (badge) wrap.append(badge);
+    };
+    item.refreshBadge();
+  }
+  return item;
 }
 
 /**
@@ -316,7 +329,7 @@ export function resultItem(card, action) {
  * @param {() => string} [cfg.getLang]  idioma de las cartas elegido (para las sugerencias)
  * @param {string} [cfg.idleMessage]
  */
-export function createCatalogSearch({ gameKey, mount, resultList, search, renderAction, getLang = () => 'en', idleMessage = 'Busca una carta para añadirla.' }) {
+export function createCatalogSearch({ gameKey, mount, resultList, search, renderAction, renderBadge = null, getLang = () => 'en', idleMessage = 'Busca una carta para añadirla.' }) {
   const ctx = { getLang };
   const schema = getFilterSchema(gameKey);
   const fields = schema.flatMap((g) => g.fields);
@@ -490,7 +503,7 @@ export function createCatalogSearch({ gameKey, mount, resultList, search, render
       loadedCount = 0;
       resultList.append(el('div', { class: 'cs-summary', role: 'status', text: `${res.total} ${res.total === 1 ? 'resultado' : 'resultados'}` }));
     }
-    res.cards.forEach((card) => resultList.append(resultItem(card, renderAction(card))));
+    res.cards.forEach((card) => resultList.append(resultItem(card, renderAction(card), renderBadge)));
     loadedCount += res.cards.length;
 
     if (res.hasMore) {

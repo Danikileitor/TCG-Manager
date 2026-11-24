@@ -30,7 +30,7 @@ const DEFAULT_GAMES = [
     description: 'Gestiona tus cartas y arma mazos con Digi-Egg Deck y Main Deck.',
     color: '#0891b2',
     deckZones: ['main', 'digi-egg'],
-    formats: ['standard'],
+    formats: ['standard', 'c-u'], // c-u: solo cartas comunes e infrecuentes
     enabled: true,
     order: 3,
   },
@@ -59,8 +59,8 @@ async function getGames(db) {
   }
   const games = (await col.find({ enabled: true }).sort({ order: 1 }).project({ _id: 0 }).toArray()).map((g) => ({
     ...g,
-    // El formato "casual" ya no existe (puede seguir en juegos guardados en MongoDB antes de quitarlo)
-    formats: (g.formats || []).filter((f) => f !== 'casual'),
+    // Los formatos salen del código (así los nuevos aparecen sin tocar MongoDB y "casual", ya eliminado, no vuelve)
+    formats: ((DEFAULT_GAMES.find((d) => d.key === g.key) || g).formats || []).filter((f) => f !== 'casual'),
   }));
   gamesCache = { games, at: Date.now() };
   return games;

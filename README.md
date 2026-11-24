@@ -27,6 +27,7 @@ tcg-manager/
 │   ├── js/   api.js · ui.js · card-images.js · card-viewer.js · session.js · auth.js · home.js
 │   │         collection.js · deck-builder.js · card-providers.js · catalog-search.js
 │   │         games-cache.js · language.js
+│   ├── data/banlists.json       # copia de seguridad de las listas de prohibidas/limitadas
 │   ├── data/ygo/                # datos de Yu-Gi-Oh! (nombres por idioma, filtros, sets, artes alt.), generados
 │   ├── site.webmanifest         # manifest de la web app (instalable)
 │   └── favicon.ico · favicon-96x96.png · apple-touch-icon.png
@@ -190,7 +191,21 @@ El editor de mazos no deja pasar del límite de copias (el botón "+ Mazo" avisa
 | Yu-Gi-Oh! (todos los formatos) | 3 por carta |
 | Digimon | 4 por número de carta (los artes alternativos cuentan como la misma carta) |
 
-Al importar un mazo se recortan las copias que pasen del límite del formato (se avisa de cuántas). Si cambias a un formato más estricto, las copias de más no se borran: se muestra un aviso. No incluye listas de prohibidas/limitadas. Reglas en `public/js/deck-rules.js`.
+Al importar un mazo se recortan las copias que pasen del límite del formato (se avisa de cuántas). Si cambias a un formato más estricto, las copias de más no se borran: se muestra un aviso. Las listas de prohibidas/limitadas se suman a este límite (siguiente apartado). Reglas en `public/js/deck-rules.js`.
+
+### Prohibidas, limitadas y formato Digimon C / U
+
+En el buscador del editor de mazos, cada carta afectada por la lista del formato elegido muestra en la esquina superior derecha de su imagen un símbolo rojo de prohibido (🚫) o un número amarillo dentro de un círculo rojo (1, 2 o 3 copias). Al cambiar de formato las insignias se actualizan. Además, el editor **no deja añadir** cartas prohibidas ni pasar del límite (mensaje al pulsar "+ Mazo"), y avisa si un mazo importado o cambiado de formato incluye cartas ilegales.
+
+| TCG | Fuente (siempre actual) | Formatos con lista |
+|---|---|---|
+| MTG | `legalities` que Scryfall devuelve con cada carta (banned = prohibida, restricted = 1 copia). Para cartas de la colección o de mazos guardados se consulta `cards/collection` de Scryfall | Standard, Modern, Pioneer, Commander, Legacy, Vintage, Pauper |
+| Yu-Gi-Oh! | API de YGOPRODeck (`banlist=tcg`): Banned / Limited / Semi-Limited | Advanced. **Traditional y Speed Duel no tienen fuente automática fiable: no se marca nada** |
+| Digimon | Página oficial de cartas restringidas de Bandai (`world.digimoncard.com/rule/restriction_card`): prohibidas, restringidas a 1 y parejas prohibidas (estas últimas salen como aviso en el mazo) | Standard y C / U |
+
+**Actualización automática.** La función `netlify/functions/banlists.js` (`/api/banlists`) lee esas fuentes y responde con caché de 12 h en el CDN de Netlify; el navegador la guarda otras 24 h. No hay que tocar nada cuando salga una lista nueva: se recoge sola en el siguiente día. Si una fuente falla o la página oficial cambia de estructura (se comprueba que la lista tenga un tamaño razonable), se usa la copia de seguridad `public/data/banlists.json` (Digimon con la lista de 1-sep-2026; las parejas prohibidas de Digimon se mantienen siempre en ese archivo, edítalo si cambian). Si ni eso funciona, el editor sigue funcionando sin insignias.
+
+**Digimon C / U** (`c-u`): solo cartas Common (C) y Uncommon (U), incluidos Digi-Egg, Tamer y Option; no se admiten R, SR, SEC ni P. Los artes alternativos de cartas C/U sí valen. Se basa en el evento oficial *Regulation Battle Vol. 1 (C & U Limited Battles)* de Bandai; no existe un reglamento permanente, así que se asumen 4 copias por número de carta y **también se aplica la lista de prohibidas/restringidas del formato Standard** (suposición, puedes quitarla en `statusFor` de `public/js/banlist.js`). La rareza se comprueba con la que devuelve el catálogo, por lo que las cartas de "Mi colección" (que no guardan rareza) no se marcan por rareza.
 
 ### Nombres con set, Ace y Dual
 

@@ -12,6 +12,28 @@ import { markPreviewable } from './ui.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, debounce, withImageFallback, safeImageUrl } from './ui.js';
 import { betterImageUrl } from './card-images.js';
+import { loadBanlists, ensureLegalities, statusFor, bannedPairsIn, banBadge } from './banlist.js';
+
+const FORMAT_LABELS = { 'c-u': 'C / U', 'speed-duel': 'Speed Duel' };
+const formatLabel = (f) => FORMAT_LABELS[f] || f;
+
+// Mensaje cuando una carta no se puede añadir por el límite del formato
+function limitMessage(card) {
+  const limit = copyLimit(game.key, deck.format, card);
+  const status = statusFor(game.key, deck.format, card);
+  if (limit === 0) return `${card.name}: ${status ? status.reason.toLowerCase() : 'no permitida'} en ${formatLabel(deck.format)}`;
+  return `${card.name}: máximo ${limit} ${limit === 1 ? 'copia' : 'copias'} en un mazo ${formatLabel(deck.format)}${status ? ` (${status.reason.toLowerCase()})` : ''}`;
+}
+
+// Insignia de prohibida / limitada de cada resultado del buscador
+const badgeFor = (card) => banBadge(statusFor(game.key, deck ? deck.format : game.formats[0], card));
+
+// Vuelve a dibujar las insignias de los resultados (al cambiar de formato o cuando llegan las listas)
+async function refreshBadges() {
+  const items = [...els.resultList.querySelectorAll('.result-item')].filter((i) => i.refreshBadge);
+  if (game.key === 'mtg') await ensureLegalities(items.map((i) => i._card));
+  items.forEach((i) => i.refreshBadge());
+}
 
 // Etiqueta con el idioma de una carta (ES, EN, FR...)
 function langBadge(code) {
@@ -139,6 +161,11 @@ function showEditor(newDeck) {
   els.deleteBtn.classList.toggle('hidden', !deck._id);
   renderZones();
   completeLabels(deck);
+  // MTG: la legalidad de las cartas guardadas se consulta a Scryfall (para avisar de prohibidas)
+  if (game.key === 'mtg') {
+    const shown = deck;
+    ensureLegalities(shown.cards).then(() => deck === shown && renderZones());
+  }
 }
 
 // Cartas guardadas antes de existir el set / la variante (Ace, Dual): se completan en segundo plano y se repinta
@@ -192,7 +219,7 @@ function deckTile(d) {
     'article',
     { class: 'tcg-card deck-tile', tabindex: '0', role: 'button', 'aria-label': `Abrir el mazo ${d.name}`, onClick: open, onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } } },
     box,
-    el('div', { class: 'info' }, el('div', { class: 'name', text: d.name }), el('div', { class: 'meta', text: [d.format, `${d.cardCount || 0} cartas`].filter(Boolean).join(' · ') }))
+    el('div', { class: 'info' }, el('div', { class: 'name', text: d.name }), el('div', { class: 'meta', text: [formatLabel(d.format), `${d.cardCount || 0} cartas`].filter(Boolean).join(' · ') }))
   );
 }
 
@@ -266,7 +293,10 @@ function renderZones() {
 
   clear(els.hints);
   const hints = deckHints(game.key, deck.format, totals);
-  overLimit(game.key, deck.format, deck.cards).forEach((x) => hints.push(`${x.name}: ${x.count} copias (máximo ${x.limit} en ${deck.format}).`));
+  overLimit(game.key, deck.format, deck.cards).forEach((x) =>
+    hints.push(x.limit === 0 ? `${x.name}: no permitida en ${formatLabel(deck.format)} (prohibida o fuera de las rarezas del formato).` : `${x.name}: ${x.count} copias (máximo ${x.limit} en ${formatLabel(deck.format)}).`)
+  );
+  bannedPairsIn(game.key, deck.cards).forEach((p) => hints.push(`Pareja prohibida en el mismo mazo: ${p}.`));
   if (hints.length) {
     const ul = el('ul', { class: 'hint-list' });
     hints.forEach((h) => ul.append(el('li', { text: h })));
@@ -282,7 +312,7 @@ function addCardToDeck(card, zoneOverride) {
 
   // Límite de copias según el TCG y el formato (cuenta todas las zonas)
   if (copiesLeft(game.key, deck.format, deck.cards, card) < 1) {
-    return toast(`${card.name}: máximo ${copyLimit(game.key, deck.format, card)} ${copyLimit(game.key, deck.format, card) === 1 ? 'copia' : 'copias'} en un mazo ${deck.format}`, 'error');
+    return toast(limitMessage(card), 'error');
   }
 
   const existing = deck.cards.find((c) => c.cardId === card.cardId && c.zone === zone);
@@ -310,7 +340,7 @@ function addCardToDeck(card, zoneOverride) {
 
 function changeQty(card, delta) {
   if (delta > 0 && copiesLeft(game.key, deck.format, deck.cards, card) < delta) {
-    return toast(`${card.name}: máximo ${copyLimit(game.key, deck.format, card)} ${copyLimit(game.key, deck.format, card) === 1 ? 'copia' : 'copias'} en un mazo ${deck.format}`, 'error');
+    return toast(limitMessage(card), 'error');
   }
   card.quantity += delta;
   if (card.quantity <= 0) return removeCard(card);
@@ -387,6 +417,7 @@ function buildCatalogSearch() {
     search: (req) => searchCatalog(game.key, req.query, catalogLang, req),
     renderAction: (card) =>
       el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(card, els.targetZone.value) }),
+    renderBadge: badgeFor,
   });
 }
 
@@ -418,9 +449,10 @@ function renderResults(results) {
   }
   results.forEach((r) => {
     els.resultList.append(
-      resultItem(r, el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(r, els.targetZone.value) }))
+      resultItem(r, el('button', { class: 'btn btn-sm', type: 'button', text: '+ Mazo', onClick: () => addCardToDeck(r, els.targetZone.value) }), badgeFor)
     );
   });
+  refreshBadges();
 }
 
 async function runSearch() {
@@ -532,6 +564,7 @@ function buildTargetZones() {
 els.format.addEventListener('change', () => {
   if (!deck) return;
   deck.format = els.format.value;
+  refreshBadges();
   if (fixCommanderZone()) toast('Las cartas del Comandante pasan al mazo principal', 'info');
   buildTargetZones();
   markDirty();
@@ -555,7 +588,7 @@ async function init() {
   document.getElementById('nav-decks').href = `/deck-builder?game=${key}`;
 
   // Formatos y zonas de destino según el TCG
-  game.formats.forEach((f) => els.format.append(el('option', { value: f, text: f })));
+  game.formats.forEach((f) => els.format.append(el('option', { value: f, text: formatLabel(f) })));
   buildTargetZones();
 
   // Idioma de las cartas del catálogo
@@ -570,6 +603,11 @@ async function init() {
   });
 
   buildCatalogSearch();
+  // Listas de prohibidas / limitadas (actualizadas automáticamente); al llegar se redibuja lo que dependa de ellas
+  loadBanlists().then(() => {
+    if (deck) renderZones();
+    refreshBadges();
+  });
 
   try {
     await loadDecks('');
