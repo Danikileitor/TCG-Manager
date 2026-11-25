@@ -4,14 +4,20 @@
 import { el } from './ui.js';
 import { mat, makeGenericBack } from './card-viewer.js';
 import { loadCardImage, fitFor, placeholderCanvas } from './hand-sim.js';
+import { layoutFor, areasOf } from './playtest-logic.js';
 
 const ASPECT = 63 / 88;
 const FOV = (34 * Math.PI) / 180;
-const TILT = (56 * Math.PI) / 180;
-const PILE_ORDER = ['library', 'graveyard', 'exile', 'extra', 'security'];
-const FIELD = { x0: -4.45, x1: 5.9, y0: -2.55, y1: 3.55 }; // rectángulo del campo en la mesa
-const HAND = { x0: -4.45, x1: 5.9, y0: -4.25, y1: -2.75 };
-const PILE_X = -5.75;
+const TILT = (28 * Math.PI) / 180; // inclinación suave: la mesa se ve casi de frente
+const CW = 1.15; // tamaño de una celda de la rejilla del tablero (unidades de mesa; la carta mide ~0.72 x 1)
+const CH = 1.42;
+// Colores de la mesa de cada juego: [fondo de la escena, tapete, acento de zonas]
+const THEMES = {
+  mtg: { bg: [0.03, 0.07, 0.06], table: [0.07, 0.17, 0.13], accent: [0.45, 0.85, 0.6] },
+  ygo: { bg: [0.06, 0.04, 0.09], table: [0.14, 0.1, 0.2], accent: [0.8, 0.6, 0.98] },
+  digimon: { bg: [0.03, 0.06, 0.11], table: [0.07, 0.13, 0.24], accent: [0.45, 0.75, 1] },
+  generic: { bg: [0.04, 0.06, 0.09], table: [0.09, 0.15, 0.2], accent: [0.65, 0.75, 0.85] },
+};
 const reduced = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const VERT = `attribute vec2 a_pos; attribute vec2 a_uv; uniform mat4 u_mvp; varying vec2 v_uv; varying vec2 v_pos;
@@ -63,6 +69,36 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
   if (!gl) throw new Error('Este navegador no tiene WebGL');
   const tip = el('div', { class: 'pt3d-tip hidden' });
   stage.append(canvas, tip);
+
+  // ----- geometría del tablero de este juego (a partir de su rejilla) -----
+  const layout = layoutFor(gameKey);
+  const theme = THEMES[layout.theme] || THEMES.generic;
+  const bw = layout.cols * CW;
+  const bh = layout.rows * CH;
+  const board = { x0: -bw / 2, x1: bw / 2, y0: -bh / 2, y1: bh / 2 };
+  const HAND = { x0: board.x0, x1: board.x1, y0: board.y0 - 1.75, y1: board.y0 - 0.25 };
+  const view = { top: board.y1 + 0.4, bottom: HAND.y0 - 0.1 };
+  const cellRect = (c, r, w = 1, h = 1) => ({ x0: board.x0 + c * CW, x1: board.x0 + (c + w) * CW, y1: board.y1 - r * CH, y0: board.y1 - (r + h) * CH });
+  const mid = (r) => ({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
+  // Destinos donde se puede soltar una carta, de más específico a menos
+  const targets = [];
+  const pileCells = [];
+  for (const cell of layout.cells) {
+    if (cell.kind === 'pile') { if (pt.zones[cell.zone]) { const r = cellRect(cell.c, cell.r); pileCells.push({ zone: cell.zone, rect: r }); targets.push({ zone: cell.zone, rect: r }); } }
+    else if (cell.kind === 'slots') cell.cells.forEach(([c, r], i) => targets.push({ zone: 'field', area: cell.area, slot: i, rect: cellRect(c, r) }));
+    else targets.push({ zone: 'field', area: cell.area, rect: cellRect(cell.c, cell.r, cell.w, cell.h) });
+  }
+  targets.push({ zone: 'hand', rect: HAND });
+  const inRect = (r, x, y) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
+  const areaCardPos = (card, i) => {
+    const def = areasOf(gameKey).find((d) => d.area === card.area) || areasOf(gameKey)[0];
+    if (def.kind === 'slots') { const [c, r] = def.cells[Math.min(card.slot || 0, def.cells.length - 1)]; return mid(cellRect(c, r)); }
+    const per = def.w * def.h;
+    const k = i % per;
+    const p = mid(cellRect(def.c + (k % def.w), def.r + Math.floor(k / def.w)));
+    const lap = Math.floor(i / per);
+    return { x: p.x + lap * 0.09, y: p.y - lap * 0.09 };
+  };
 
   const compile = (type, src) => { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || 'shader'); return sh; };
   const prog = gl.createProgram();
@@ -136,24 +172,33 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
   let alive = true;
   let pv = mat.identity();
   let quads = [];
-  let zoneRects = [];
 
   function sync() {
     items = [];
     const push = (card, zone, tgt) => items.push({ uid: card.uid, card, zone, tgt: { x: 0, y: 0, z: 0.01, rx: 0, rz: 0, ry: card.faceDown ? Math.PI : 0, s: 1, dim: 1, ...tgt } });
-    pt.zones.field.forEach((c, i) => push(c, 'field', { x: -3.85 + (i % 10) * 1.05, y: 2.85 - Math.floor(i / 10) * 1.2, z: 0.02, rz: c.tapped ? -Math.PI / 2 : 0 }));
+    const counters = {};
+    pt.zones.field.forEach((c) => {
+      const key = c.area || '';
+      const i = counters[key] || 0;
+      counters[key] = i + 1;
+      const p = areaCardPos(c, i);
+      push(c, 'field', { x: p.x, y: p.y, z: 0.02 + i * 0.001, rz: c.tapped ? -Math.PI / 2 : 0 });
+    });
     const n = pt.zones.hand.length;
-    const step = Math.min(0.9, 9.6 / Math.max(1, n));
-    pt.zones.hand.forEach((c, i) => push(c, 'hand', { x: 0.7 + (i - (n - 1) / 2) * step, y: -3.55, z: 0.45 + i * 0.002, rx: 0.62, s: 1.12 }));
-    piles = PILE_ORDER.filter((z) => pt.zones[z]).map((zone, i) => {
+    const step = Math.min(0.9, (bw - 1) / Math.max(1, n));
+    const hy = mid(HAND).y - 0.05;
+    pt.zones.hand.forEach((c, i) => push(c, 'hand', { x: (i - (n - 1) / 2) * step, y: hy, z: 0.45 + i * 0.002, rx: 0.5, s: 1.12 }));
+    piles = pileCells.map(({ zone, rect }) => {
       const list = pt.zones[zone];
       const top = list[list.length - 1];
       const showFace = (zone === 'graveyard' || zone === 'exile' || (zone === 'extra' && gameKey !== 'digimon' && gameKey !== 'ygo')) && top && !top.faceDown;
-      return { zone, count: list.length, x: PILE_X, y: 3.0 - i * 1.3, top, showFace };
+      const m = mid(rect);
+      return { zone, count: list.length, x: m.x, y: m.y + 0.12, top, showFace, rect };
     });
+    const lib = piles.find((p) => p.zone === 'library') || { x: 0, y: 0 };
     // Posición actual de las cartas nuevas: salen de la pila de la biblioteca
     for (const it of items) {
-      if (!anim.has(it.uid)) anim.set(it.uid, { cur: { ...it.tgt, x: PILE_X, y: 3.0, z: 0.2, ry: Math.PI } });
+      if (!anim.has(it.uid)) anim.set(it.uid, { cur: { ...it.tgt, x: lib.x, y: lib.y, z: 0.2, ry: Math.PI } });
       anim.get(it.uid).tgt = it.tgt;
     }
     const alive = new Set(items.map((i) => i.uid));
@@ -222,28 +267,86 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
     return { x: a0[0] + (a1[0] - a0[0]) * t, y: a0[1] + (a1[1] - a0[1]) * t };
   }
 
+  // Marco fino de una zona
+  const outline = (r, color, t = 0.025) => {
+    rect(r.x0, r.x1, r.y1 - t, r.y1, -0.004, color);
+    rect(r.x0, r.x1, r.y0, r.y0 + t, -0.004, color);
+    rect(r.x0, r.x0 + t, r.y0, r.y1, -0.004, color);
+    rect(r.x1 - t, r.x1, r.y0, r.y1, -0.004, color);
+  };
+  const inset = (r, d) => ({ x0: r.x0 + d, x1: r.x1 - d, y0: r.y0 + d, y1: r.y1 - d });
+  // Rótulos de texto (se dibujan una vez en un canvas y se usan como textura)
+  const labels = new Map();
+  const labelCanvas = (text) => {
+    if (labels.has(text)) return labels.get(text);
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d');
+    const font = '700 30px system-ui, sans-serif';
+    g.font = font;
+    c.width = Math.ceil(g.measureText(text).width) + 16;
+    c.height = 44;
+    g.font = font;
+    g.fillStyle = 'rgba(240,244,252,0.9)';
+    g.textBaseline = 'middle';
+    g.fillText(text, 8, 24);
+    labels.set(text, c);
+    return c;
+  };
+  // Rótulo con tamaño de letra constante; align: 'left' (x = borde izquierdo) o 'center'
+  const drawLabel = (text, x, y, align = 'left') => {
+    const c = labelCanvas(text);
+    const h = 0.17;
+    const w = (h * c.width) / c.height;
+    const cx = align === 'center' ? x : x + w / 2;
+    const m = mat.multiply(mat.translate(cx, y, -0.002), nonUniformScale(w / (2 * a), h));
+    drawQuad('front', mat.multiply(pv, m), texFor(c), 1, 0);
+  };
+  const rgba = (c, al) => [c[0], c[1], c[2], al];
+
   function frame() {
     if (!alive) return;
     requestAnimationFrame(frame);
     gl.viewport(0, 0, W, H);
-    gl.clearColor(0.05, 0.07, 0.11, 1);
+    gl.clearColor(theme.bg[0], theme.bg[1], theme.bg[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     const aspect = W / H;
     const half = Math.tan(FOV / 2);
-    const dist = Math.max(7.3 / (half * aspect), 4.9 / half);
-    pv = mat.multiply(mat.perspective(FOV, aspect, 0.1, 80), mat.multiply(mat.translate(0, -0.2, -dist), mat.rotateX(-TILT)));
+    // La cámara encuadra todo el tablero + la mano; con poca inclinación hace falta poca distancia
+    const halfW = bw / 2 + 0.55;
+    const halfH = (view.top - view.bottom) / 2;
+    const dist = Math.max(halfW / (half * aspect), (halfH * Math.cos(TILT) + 0.5) / half) * 1.03 + halfH * Math.sin(TILT) * 0.45;
+    const cy = (view.top + view.bottom) / 2;
+    pv = mat.multiply(mat.perspective(FOV, aspect, 0.1, 80), mat.multiply(mat.translate(0, 0, -dist), mat.multiply(mat.rotateX(-TILT), mat.translate(0, -cy, 0))));
 
     // Mesa y zonas
-    rect(-6.8, 6.8, -4.7, 4.3, -0.01, [0.09, 0.15, 0.2, 1]);
-    rect(FIELD.x0, FIELD.x1, FIELD.y0, FIELD.y1, -0.005, [1, 1, 1, 0.05]);
-    rect(HAND.x0, HAND.x1, HAND.y0, HAND.y1, -0.005, [1, 1, 1, 0.04]);
-    zoneRects = [];
+    rect(board.x0 - 0.5, board.x1 + 0.5, HAND.y0 - 0.15, board.y1 + 0.3, -0.01, rgba(theme.table, 1));
+    rect(HAND.x0, HAND.x1, HAND.y0, HAND.y1, -0.006, [0, 0, 0, 0.18]);
+    outline(HAND, rgba(theme.accent, 0.25));
+    drawLabel(`${L.hand} (${pt.zones.hand.length})`, HAND.x0 + 0.1, HAND.y1 - 0.14);
+    for (const cell of layout.cells) {
+      if (cell.kind === 'slots') {
+        cell.cells.forEach(([c, r], i) => {
+          const rc = inset(cellRect(c, r), 0.05);
+          rect(rc.x0, rc.x1, rc.y0, rc.y1, -0.006, rgba(theme.accent, 0.06));
+          outline(rc, rgba(theme.accent, 0.5));
+          if (i === 0) drawLabel(cell.label, rc.x0 + 0.06, rc.y1 - 0.13);
+        });
+      } else if (cell.kind === 'free') {
+        const rc = inset(cellRect(cell.c, cell.r, cell.w, cell.h), 0.05);
+        rect(rc.x0, rc.x1, rc.y0, rc.y1, -0.006, rgba(theme.accent, 0.045));
+        outline(rc, rgba(theme.accent, 0.28));
+        drawLabel(cell.label, rc.x0 + 0.08, rc.y1 - 0.13);
+      }
+    }
     quads = [];
     const k = reduced() ? 1 : 0.22;
 
     // Pilas
     for (const p of piles) {
-      rect(p.x - 0.42, p.x + 0.42, p.y - 0.58, p.y + 0.58, -0.004, [1, 1, 1, 0.07]);
+      const pr = inset(p.rect, 0.05);
+      rect(pr.x0, pr.x1, pr.y0, pr.y1, -0.006, rgba(theme.accent, 0.06));
+      outline(pr, rgba(theme.accent, 0.4));
+      drawLabel(`${L[p.zone] || p.zone} · ${p.count}`, (pr.x0 + pr.x1) / 2, pr.y0 + 0.13, 'center');
       const layers = Math.min(6, Math.ceil(p.count / 8));
       const base = { x: p.x, y: p.y, rx: 0, rz: 0, s: 0.98, dim: 0.95 };
       for (let i = 0; i < layers; i++) {
@@ -256,11 +359,8 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
         if (p.showFace) { const f = frontFor(p.top); drawQuad('front', mvp, texFor(f.src), 1, 0, f.fit); drawQuad('back', mvp, texFor(back.src), 1, 0, back.fit); } else drawQuad('back', mvp, texFor(back.src), 0.95, 0, back.fit);
       }
       const poly = project(mat.multiply(pv, modelOf({ ...base, z: 0.005, ry: 0 })), [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]]);
-      zoneRects.push({ key: `pile:${p.zone}`, zone: p.zone, poly });
       quads.push({ key: `pile:${p.zone}`, pts: poly, z: -1 });
     }
-    zoneRects.push({ key: 'zone:field', zone: 'field', poly: rectPoly(FIELD) });
-    zoneRects.push({ key: 'zone:hand', zone: 'hand', poly: rectPoly(HAND, 0.3) });
 
     // Cartas (de la más lejana / baja a la más cercana, para que se tapen bien)
     const order = [...items].sort((p, q) => (p.tgt.z - q.tgt.z) || (q.tgt.y - p.tgt.y) || 0);
@@ -289,9 +389,11 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
     for (const q of quads) if (typeof q.key === 'string' && inPoly(q.pts, px, py)) return q.key;
     return null;
   }
-  const zoneAt = (px, py) => {
-    const hit2 = zoneRects.find((z) => inPoly(z.poly, px, py));
-    return hit2 ? hit2.zone : null;
+  // Destino bajo el puntero: { zone, area?, slot? } (se mira el punto sobre el plano de la mesa)
+  const targetAt = (px, py) => {
+    const w = unproject(px, py);
+    const t = targets.find((x) => inRect(x.rect, w.x, w.y));
+    return t ? { zone: t.zone, area: t.area, slot: t.slot } : null;
   };
   const lookup = (uid) => items.find((i) => i.uid === uid);
 
@@ -328,10 +430,10 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
     const d = down;
     down = null;
     if (d.moved && drag) {
-      const zone = zoneAt(px, py);
+      const target = targetAt(px, py);
       const uid = drag.uid;
       drag = null;
-      if (zone) onDrop(uid, zone);
+      if (target) onDrop(uid, target);
       return;
     }
     if (typeof d.key === 'string' && d.key.startsWith('pile:')) return onPile(d.key.slice(5));
@@ -367,14 +469,17 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
       return { x: r.left + (cx / W) * r.width, y: r.top + (cy / H) * r.height };
     },
     cardKeys: () => quads.filter((q) => typeof q.key === 'number').map((q) => q.key),
-    zonePoint(zone) {
-      const z = zoneRects.find((x) => x.zone === zone);
+    // Centro en pantalla de un destino (zona, y opcionalmente área / hueco)
+    zonePoint(zone, area, slot) {
+      const z = targets.find((x) => x.zone === zone && (area === undefined || x.area === area) && (slot === undefined || x.slot === slot));
       if (!z) return null;
+      const m = mid(z.rect);
+      const p = project(pv, [[m.x, m.y]])[0];
       const r = canvas.getBoundingClientRect();
-      const cx = z.poly.reduce((s, p) => s + p[0], 0) / z.poly.length;
-      const cy = z.poly.reduce((s, p) => s + p[1], 0) / z.poly.length;
-      return { x: r.left + (cx / W) * r.width, y: r.top + (cy / H) * r.height };
+      return { x: r.left + (p[0] / W) * r.width, y: r.top + (p[1] / H) * r.height };
     },
+    targets: () => targets.map((t) => ({ zone: t.zone, area: t.area, slot: t.slot })),
+    tilt: () => (TILT * 180) / Math.PI,
     dispose() {
       alive = false;
       clearTimeout(menuTimer);

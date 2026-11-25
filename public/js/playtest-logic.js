@@ -11,6 +11,79 @@ const FALLBACK = { labels: { library: 'Mazo', hand: 'Mano', field: 'Campo', grav
 export const defsFor = (gameKey) => ZONE_DEFS[gameKey] || FALLBACK;
 export const zoneIdsFor = (gameKey) => Object.keys(defsFor(gameKey).labels);
 
+// ---------- Tablero de cada juego ----------
+// Rejilla de cols x rows celdas. Cada celda es una pila (zona), un hueco (slot, una carta) o un área libre (varias cartas
+// que se colocan solas en filas). La misma descripción dibuja la mesa 2D y la 3D.
+//   pile: { kind: 'pile', zone, c, r }
+//   slot: { kind: 'slots', area, label, cells: [[c, r], ...] }  (un hueco por celda)
+//   free: { kind: 'free', area, label, c, r, w, h }
+export const LAYOUTS = {
+  // Magia: una columna de pilas y el campo de batalla con la fila de tierras aparte
+  mtg: {
+    cols: 9, rows: 4, theme: 'mtg',
+    cells: [
+      { kind: 'pile', zone: 'library', c: 0, r: 0 }, { kind: 'pile', zone: 'graveyard', c: 0, r: 1 },
+      { kind: 'pile', zone: 'exile', c: 0, r: 2 }, { kind: 'pile', zone: 'extra', c: 0, r: 3 },
+      { kind: 'free', area: 'permanents', label: 'Criaturas y otros permanentes', c: 1, r: 0, w: 8, h: 3 },
+      { kind: 'free', area: 'lands', label: 'Tierras', c: 1, r: 3, w: 8, h: 1 },
+    ],
+  },
+  // Yu-Gi-Oh!: el tapete oficial (zonas de monstruo extra, monstruos, magias/trampas, campo, cementerio, mazo y extra deck)
+  ygo: {
+    cols: 7, rows: 3, theme: 'ygo',
+    cells: [
+      { kind: 'slots', area: 'emz', label: 'Monstruo extra', cells: [[2, 0], [4, 0]] },
+      { kind: 'pile', zone: 'exile', c: 6, r: 0 },
+      { kind: 'slots', area: 'fieldspell', label: 'Magia de campo', cells: [[0, 1]] },
+      { kind: 'slots', area: 'monster', label: 'Zona de monstruos', cells: [[1, 1], [2, 1], [3, 1], [4, 1], [5, 1]] },
+      { kind: 'pile', zone: 'graveyard', c: 6, r: 1 },
+      { kind: 'pile', zone: 'extra', c: 0, r: 2 },
+      { kind: 'slots', area: 'spell', label: 'Magias y trampas', cells: [[1, 2], [2, 2], [3, 2], [4, 2], [5, 2]] },
+      { kind: 'pile', zone: 'library', c: 6, r: 2 },
+    ],
+  },
+  // Digimon: seguridad y mazo a un lado, zona de cría, zona de batalla y tamers
+  digimon: {
+    cols: 9, rows: 4, theme: 'digimon',
+    cells: [
+      { kind: 'pile', zone: 'library', c: 0, r: 0 }, { kind: 'pile', zone: 'graveyard', c: 0, r: 1 },
+      { kind: 'pile', zone: 'exile', c: 0, r: 2 }, { kind: 'pile', zone: 'extra', c: 0, r: 3 },
+      { kind: 'pile', zone: 'security', c: 1, r: 0 },
+      { kind: 'free', area: 'tamer', label: 'Tamers y opciones', c: 2, r: 0, w: 7, h: 1 },
+      { kind: 'slots', area: 'breeding', label: 'Cría', cells: [[1, 2]] },
+      { kind: 'free', area: 'battle', label: 'Zona de batalla', c: 2, r: 1, w: 7, h: 3 },
+    ],
+  },
+};
+const DEFAULT_LAYOUT = {
+  cols: 8, rows: 3, theme: 'generic',
+  cells: [
+    { kind: 'pile', zone: 'library', c: 0, r: 0 }, { kind: 'pile', zone: 'graveyard', c: 0, r: 1 }, { kind: 'pile', zone: 'exile', c: 0, r: 2 },
+    { kind: 'free', area: 'field', label: 'Campo', c: 1, r: 0, w: 7, h: 3 },
+  ],
+};
+export const layoutFor = (gameKey) => LAYOUTS[gameKey] || DEFAULT_LAYOUT;
+export const areasOf = (gameKey) => layoutFor(gameKey).cells.filter((c) => c.kind !== 'pile');
+
+// A qué área del tablero va una carta que se juega sin indicar el destino
+export function areaFor(gameKey, card) {
+  const f = card.facets || {};
+  const types = f.types || [];
+  const has = (t) => types.includes(t);
+  if (gameKey === 'mtg') return has('Land') ? 'lands' : 'permanents';
+  if (gameKey === 'ygo') {
+    if (has('Magia') && (f.subtypes || []).includes('Campo')) return 'fieldspell';
+    if (has('Magia') || has('Trampa')) return 'spell';
+    return 'monster';
+  }
+  if (gameKey === 'digimon') {
+    if (card.zone === 'digi-egg' || has('Digi-Egg')) return 'breeding';
+    if (has('Tamer') || has('Option')) return 'tamer';
+    return 'battle';
+  }
+  return 'field';
+}
+
 const HISTORY_MAX = 60;
 
 export function createPlaytest(deckCards, gameKey, rnd = secureRandom) {
@@ -70,13 +143,27 @@ export function createPlaytest(deckCards, gameKey, rnd = secureRandom) {
     shuffle(t.zones.library, rnd);
   };
   // pos: 'end' (por defecto), 'top' o 'bottom' (solo importa en la biblioteca y en pilas)
-  t.move = (uid, to, pos = 'end') => {
+  // opts (solo al campo): { area, slot } destino en el tablero; sin ellos se elige según el tipo de carta
+  t.move = (uid, to, pos = 'end', opts = {}) => {
     const at = t.find(uid);
     if (!at || !t.zones[to]) return false;
     snapshot();
     const [card] = t.zones[at.zone].splice(at.index, 1);
-    card.tapped = false;
-    card.faceDown = to === 'security' ? true : false;
+    const stays = to === 'field' && at.zone === 'field'; // dentro del campo se conserva si está girada o boca abajo
+    const prevArea = card.area;
+    if (!stays) { card.tapped = false; card.faceDown = to === 'security'; }
+    delete card.area;
+    delete card.slot;
+    if (to === 'field') {
+      const area = opts.area || (stays && prevArea) || areaFor(gameKey, card);
+      const def = areasOf(gameKey).find((a) => a.area === area) || areasOf(gameKey)[0];
+      card.area = def.area;
+      if (def.kind === 'slots') {
+        const used = new Set(t.zones.field.filter((c) => c.area === def.area).map((c) => c.slot));
+        const free = def.cells.findIndex((_, i) => !used.has(i));
+        card.slot = Number.isInteger(opts.slot) ? opts.slot : free >= 0 ? free : 0;
+      }
+    }
     if (pos === 'top') t.zones[to].unshift(card);
     else t.zones[to].push(card); // 'bottom' y 'end' coinciden: la biblioteca se lee desde el principio y su fondo es el final
     return true;

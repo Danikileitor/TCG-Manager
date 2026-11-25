@@ -68,7 +68,13 @@ function renderUser(header, username) {
     }
   });
   const theme = el('button', { class: 'theme-btn', type: 'button', title: 'Cambiar tema claro/oscuro', 'aria-label': 'Cambiar tema claro/oscuro' });
-  const paint = () => { theme.textContent = window.tcgTheme && window.tcgTheme.get() === 'light' ? '🌙' : '☀️'; };
+  // Iconos SVG (en vez de emojis, que se dibujan descentrados según la fuente del sistema)
+  const SUN = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>';
+  const MOON = '<path d="M20 14.2A8 8 0 0 1 9.8 4a8 8 0 1 0 10.2 10.2z"/>';
+  const paint = () => {
+    const light = window.tcgTheme && window.tcgTheme.get() === 'light';
+    theme.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${light ? MOON : SUN}</svg>`;
+  };
   theme.addEventListener('click', () => { if (window.tcgTheme) window.tcgTheme.toggle(); paint(); });
   paint();
   header.append(el('div', { class: 'header-user' }, theme, el('span', { class: 'muted', text: `👤 ${username}` }), logout));

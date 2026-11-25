@@ -563,6 +563,18 @@ async function startPlaytest(mode) {
   const current = currentDeckForExport();
   if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para probarlo', 'error');
   const { openPlaytest } = await import('./playtest.js');
+  // El tablero de Magic / Yu-Gi-Oh! reparte las cartas por tipo: se completan los datos que falten (máx. 4 s)
+  if (game.key === 'mtg' || game.key === 'ygo') {
+    const lacking = current.cards.filter((c) => !c.facets);
+    if (lacking.length) {
+      toast('Preparando el tablero…');
+      try {
+        const { facetsForCards } = await import('./card-providers.js');
+        const found = await Promise.race([facetsForCards(game.key, lacking), new Promise((r) => setTimeout(() => r(new Map()), 4000))]);
+        lacking.forEach((c) => found.has(c.cardId) && (c.facets = found.get(c.cardId)));
+      } catch (err) { /* se abre igualmente; las cartas sin datos van a la zona por defecto */ }
+    }
+  }
   openPlaytest({ gameKey: game.key, deck: current, mode });
 }
 document.getElementById('playtest-btn').addEventListener('click', () => startPlaytest('2d'));

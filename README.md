@@ -233,6 +233,14 @@ El botón **Partida de prueba** del editor abre una mesa en solitario (2D) para 
 
 **Mesa 3D (HTML5 canvas / WebGL)**: el botón está partido en dos mitades; la izquierda ("Partida de prueba") abre la mesa 2D y la derecha (**3D**) la misma partida sobre una mesa inclinada en 3D. Se maneja igual: clic en la pila de la biblioteca para robar, arrastrar una carta hasta una zona (pilas, campo, mano) para moverla, doble clic para jugarla o girarla, clic o clic derecho para el menú (incluye *Ver en grande (3D)*). Las cartas de la mano se levantan al pasar el ratón. El botón *Vista 2D/3D* de la barra cambia de modo sin perder la partida. Si el navegador no tiene WebGL se usa la mesa 2D. Escena en `public/js/playtest3d.js` (se descarga solo en modo 3D).
 
+**Tablero propio de cada juego** (2D y 3D usan la misma descripción, `LAYOUTS` en `public/js/playtest-logic.js`):
+- **Magic**: columna de pilas (biblioteca, cementerio, exilio, zona de mando), área de *criaturas y otros permanentes* y fila aparte para las *tierras*.
+- **Yu-Gi-Oh!**: tapete oficial: 2 zonas de monstruo extra, 5 de monstruos, 5 de magias/trampas, magia de campo, cementerio, desterradas, Deck y Extra Deck. Cada carta cae en su hueco (monstruo / magia-trampa / campo según su tipo) o en el hueco donde la sueltes.
+- **Digimon**: mazo y **seguridad** arriba, zona de **cría** (Digi-Egg), zona de **batalla** y fila de tamers/opciones.
+Si el mazo guardado no trae los tipos de las cartas (Magic / Yu-Gi-Oh!), se consultan al abrir la partida (máx. 4 s) para poder repartirlas por zonas. Al jugar una carta (doble clic) va sola a su área; al arrastrarla puedes elegir área y hueco. La mesa 3D usa una inclinación suave (28°) y colores propios de cada juego.
+**Botón de tema**: ahora usa iconos SVG (sol/luna) para que queden centrados en cualquier sistema.
+
+
 Lógica sin DOM en `public/js/playtest-logic.js` y mesa en `public/js/playtest.js` (carga bajo demanda). Es una mesa libre: no aplica reglas del juego ni controla fases o contadores.
 
 ### Valor de la colección (MTG)

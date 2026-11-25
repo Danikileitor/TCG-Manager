@@ -3,7 +3,7 @@
 import { el, clear, toast, markPreviewable, safeImageUrl } from './ui.js';
 import { betterImageUrl } from './card-images.js';
 import { findDefaultBack, openCardViewer } from './card-viewer.js';
-import { createPlaytest, defsFor } from './playtest-logic.js';
+import { createPlaytest, defsFor, layoutFor } from './playtest-logic.js';
 
 export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
   const pt = createPlaytest(deck.cards, gameKey);
@@ -91,14 +91,16 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
   }
 
   // ---------- Zonas ----------
-  function dropTarget(node, zone) {
+  // target: { zone, area?, slot? } (area y slot solo para el campo)
+  function dropTarget(node, target) {
+    const zone = target.zone;
     node.addEventListener('dragover', (e) => { e.preventDefault(); node.classList.add('over'); });
     node.addEventListener('dragleave', () => node.classList.remove('over'));
     node.addEventListener('drop', (e) => {
       e.preventDefault();
       node.classList.remove('over');
       const uid = parseInt(e.dataTransfer.getData('text/plain'), 10);
-      if (Number.isFinite(uid)) act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end'));
+      if (Number.isFinite(uid)) act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot }));
     });
     return node;
   }
@@ -115,7 +117,7 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
     }
     const node = el('button', { type: 'button', class: 'pt-pile', title: zone === 'library' ? `${L[zone]}: clic para robar · ⋯ para ver` : `${L[zone]}: clic para ver` }, face, el('span', { class: 'pt-count', text: String(cards.length) }), el('span', { class: 'pt-pile-label', text: L[zone] }));
     node.addEventListener('click', () => (zone === 'library' ? act(() => pt.draw(1)) : openPanel(zone)));
-    return dropTarget(node, zone);
+    return dropTarget(node, { zone });
   }
 
   function openPanel(zone) {
@@ -158,6 +160,7 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
       b('Robar (D)', () => pt.draw(1)),
       b('Robar', () => pt.draw(nVal())), n,
       b('Moler', () => pt.mill(nVal()), { title: `Las cartas de arriba de ${L.library} van a ${L.graveyard}` }),
+      el('button', { type: 'button', class: 'btn btn-sm btn-ghost', text: `Ver ${L.library}`, onClick: () => openPanel('library') }),
       b('Barajar', () => pt.shuffleLibrary()),
       b('Siguiente turno', () => pt.nextTurn(), { title: 'Endereza el campo y roba una carta' }),
       mull, undo,
@@ -171,17 +174,34 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
       return;
     }
     clear(board);
-    const piles = el('div', { class: 'pt-piles' });
-    ['library', 'graveyard', 'exile', 'extra', 'security'].filter((z) => pt.zones[z]).forEach((z) => piles.append(pile(z)));
-    piles.append(el('button', { type: 'button', class: 'btn btn-ghost btn-sm pt-see', text: `Ver ${L.library}`, onClick: () => openPanel('library') }));
-
-    const field = dropTarget(el('div', { class: 'pt-field' }, el('span', { class: 'pt-zone-label', text: L.field })), 'field');
-    pt.zones.field.forEach((c) => field.append(cardEl(c, 'field')));
-    const hand = dropTarget(el('div', { class: 'pt-hand' }, el('span', { class: 'pt-zone-label', text: `${L.hand} (${pt.zones.hand.length})` })), 'hand');
+    const layout = layoutFor(gameKey);
+    const grid = el('div', { class: `pt-layout pt-theme-${layout.theme}` });
+    grid.style.setProperty('--cols', layout.cols);
+    grid.style.setProperty('--rows', layout.rows);
+    grid.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${layout.rows}, minmax(0, 1fr))`;
+    const place = (node, c, r, w = 1, h = 1) => { node.style.gridColumn = `${c + 1} / span ${w}`; node.style.gridRow = `${r + 1} / span ${h}`; return node; };
+    const fieldCards = (area) => pt.zones.field.filter((c) => c.area === area);
+    for (const cell of layout.cells) {
+      if (cell.kind === 'pile') {
+        if (pt.zones[cell.zone]) grid.append(place(el('div', { class: 'pt-cell' }, pile(cell.zone)), cell.c, cell.r));
+      } else if (cell.kind === 'free') {
+        const area = dropTarget(el('div', { class: 'pt-field pt-area' }, el('span', { class: 'pt-zone-label', text: cell.label })), { zone: 'field', area: cell.area });
+        fieldCards(cell.area).forEach((c) => area.append(cardEl(c, 'field')));
+        grid.append(place(area, cell.c, cell.r, cell.w, cell.h));
+      } else {
+        cell.cells.forEach(([c, r], i) => {
+          const slot = dropTarget(el('div', { class: 'pt-field pt-slot', title: cell.label }, i === 0 ? el('span', { class: 'pt-zone-label', text: cell.label }) : null), { zone: 'field', area: cell.area, slot: i });
+          pt.zones.field.filter((x) => x.area === cell.area && x.slot === i).forEach((x) => slot.append(cardEl(x, 'field')));
+          grid.append(place(slot, c, r));
+        });
+      }
+    }
+    const hand = dropTarget(el('div', { class: 'pt-hand' }, el('span', { class: 'pt-zone-label', text: `${L.hand} (${pt.zones.hand.length})` })), { zone: 'hand' });
     const fan = el('div', { class: 'pt-fan' });
     pt.zones.hand.forEach((c) => fan.append(cardEl(c, 'hand')));
     hand.append(fan);
-    board.append(piles, el('div', { class: 'pt-center' }, field, hand));
+    board.append(el('div', { class: 'pt-center' }, grid, hand));
     renderPanel();
   }
 
@@ -197,7 +217,7 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
         onMenu: (card, zone, x, y) => openMenu(card, zone, x, y),
         onDouble: (card, zone) => act(() => (zone === 'field' ? pt.toggleTap(card.uid) : pt.move(card.uid, 'field'))),
         onPile: (zone) => (zone === 'library' ? act(() => pt.draw(1)) : openPanel(zone)),
-        onDrop: (uid, zone) => act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end')),
+        onDrop: (uid, target) => act(() => pt.move(uid, target.zone, target.zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot })),
       });
       dialog._scene = scene; // (para pruebas)
       return true;
