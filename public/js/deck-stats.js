@@ -166,7 +166,7 @@ async function missingPane(gameKey, deck) {
     const need = new Map();
     deck.cards.forEach((c) => {
       const key = copyKey(gameKey, c);
-      if (!need.has(key)) need.set(key, { id: c.cardId, name: c.altName || c.name, label: displayName(c, gameKey), qty: 0 });
+      if (!need.has(key)) need.set(key, { card: c, id: c.cardId, name: c.altName || c.name, label: displayName(c, gameKey), qty: 0 });
       need.get(key).qty += c.quantity;
     });
     const missing = [...need.entries()]
@@ -191,7 +191,17 @@ async function missingPane(gameKey, deck) {
       const a = el('a', { href: url, download: `lista-compra-${deck.name || 'mazo'}.txt` });
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
     } });
-    pane.append(el('p', { text: `Te faltan ${total} copias (${missing.length} cartas distintas) respecto a tu colección${cost ? `. Coste aproximado: ${euro(cost)}` : ''}.` }), list, el('div', { class: 'toolbar' }, copy, download));
+    const wishBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', text: 'Añadir a la wishlist', onClick: async () => {
+      wishBtn.disabled = true;
+      try {
+        await api.post('/wishlist?bulk=1', { game: gameKey, cards: missing.map((m) => ({ ...m.card, quantity: m.miss })) });
+        toast('Cartas añadidas a la wishlist', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+        wishBtn.disabled = false;
+      }
+    } });
+    pane.append(el('p', { text: `Te faltan ${total} copias (${missing.length} cartas distintas) respecto a tu colección${cost ? `. Coste aproximado: ${euro(cost)}` : ''}.` }), list, el('div', { class: 'toolbar' }, copy, download, wishBtn));
   } catch (err) {
     clear(pane);
     pane.append(el('p', { class: 'tr-error', text: err.message }));

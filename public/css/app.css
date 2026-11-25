@@ -1113,3 +1113,12 @@
 .shared-deck .deck-row { grid-template-columns: 1fr auto; }
 .qty-static { color: var(--text-muted); font-weight: 600; }
 .hist-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+
+/* ----- Estado / acabado y wishlist ----- */
+.variant-row { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.2rem; }
+.mini-select { font: inherit; font-size: 0.72rem; padding: 0.1rem 0.25rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; max-width: 7.5rem; }
+.result-actions { display: flex; gap: 0.3rem; }
+
+/* ----- Aviso de cambio en las listas ----- */
+.list-alert { margin: 0.6rem 0; padding: 0.6rem 0.8rem; border: 1px solid #f59e0b; border-radius: 10px; background: rgba(245, 158, 11, 0.1); font-size: 0.88rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }

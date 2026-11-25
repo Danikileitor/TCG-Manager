@@ -5,6 +5,10 @@ import { loadGames, fetchGames } from './games-cache.js';
 
 const USER_KEY = 'tcg.user.v1';
 
+// Service worker (uso sin conexión). Al cerrar sesión se borra la caché con los datos de la cuenta.
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+const clearAccountCache = () => (window.caches ? window.caches.delete('tcg-api-v1').catch(() => {}) : Promise.resolve());
+
 // La marca se pinta al instante (sin esperar a ninguna petición); el usuario se completa cuando se sabe.
 // Para que no "salte", se enseña el último usuario conocido mientras se confirma la sesión.
 function ensureBrand() {
@@ -28,11 +32,21 @@ export async function requireSession() {
     renderHeader(user);
     return user;
   } catch (err) {
+    // Sin conexión no es lo mismo que sin sesión: solo se sale si el servidor dice que no hay sesión
+    if (err && err.status !== 401) return offlineUser();
     try { window.localStorage.removeItem(USER_KEY); } catch (e) { /* sin almacenamiento */ }
+    clearAccountCache();
     window.location.replace('/');
     // Detenemos la ejecución del resto de la página mientras redirige
     return new Promise(() => {});
   }
+}
+
+// Sin conexión se sigue con el último usuario conocido (los datos vienen de la caché del service worker)
+function offlineUser() {
+  const name = lastUser || 'sin conexión';
+  renderHeader({ username: name });
+  return { id: '', username: name, offline: true };
 }
 
 function renderHeader(user) {
@@ -48,11 +62,16 @@ function renderUser(header, username) {
     try {
       await api.post('/auth/logout');
     } finally {
+      await clearAccountCache();
       try { window.localStorage.removeItem(USER_KEY); } catch (err) { /* sin almacenamiento */ }
       window.location.replace('/');
     }
   });
-  header.append(el('div', { class: 'header-user' }, el('span', { class: 'muted', text: `👤 ${username}` }), logout));
+  const theme = el('button', { class: 'theme-btn', type: 'button', title: 'Cambiar tema claro/oscuro', 'aria-label': 'Cambiar tema claro/oscuro' });
+  const paint = () => { theme.textContent = window.tcgTheme && window.tcgTheme.get() === 'light' ? '🌙' : '☀️'; };
+  theme.addEventListener('click', () => { if (window.tcgTheme) window.tcgTheme.toggle(); paint(); });
+  paint();
+  header.append(el('div', { class: 'header-user' }, theme, el('span', { class: 'muted', text: `👤 ${username}` }), logout));
 }
 
 // Carga los datos del TCG indicado en ?game=... y aplica su color de acento

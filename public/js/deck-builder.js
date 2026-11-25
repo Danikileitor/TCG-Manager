@@ -11,7 +11,7 @@ import { markPreviewable } from './ui.js';
 import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, debounce, withImageFallback, safeImageUrl } from './ui.js';
 import { betterImageUrl } from './card-images.js';
-import { loadBanlists, ensureLegalities, statusFor, bannedPairsIn, banBadge } from './banlist.js';
+import { loadBanlists, ensureLegalities, statusFor, bannedPairsIn, banBadge, listsFingerprint } from './banlist.js';
 
 const FORMAT_LABELS = { 'c-u': 'C / U', 'speed-duel': 'Speed Duel' };
 const formatLabel = (f) => FORMAT_LABELS[f] || f;
@@ -126,6 +126,35 @@ function renderPicker(selectedId) {
 async function loadDecks(selectedId) {
   ({ decks } = await api.get(`/decks?game=${encodeURIComponent(game.key)}`));
   renderPicker(selectedId);
+}
+
+// Aviso cuando las listas de prohibidas/limitadas cambian entre visitas: se revisan los mazos del juego
+// y se avisa de los que ahora tienen cartas prohibidas o por encima del límite.
+async function checkListChanges() {
+  const fp = listsFingerprint(game.key);
+  if (!fp) return;
+  const storeKey = `tcg.banlists.seen.${game.key}`;
+  let seen = null;
+  try { seen = localStorage.getItem(storeKey); localStorage.setItem(storeKey, fp); } catch (err) { return; }
+  if (seen === null || seen === fp || !decks.length) return; // primera visita (sin referencia) o sin cambios
+  const affected = [];
+  for (const d of decks.slice(0, 40)) {
+    try {
+      const { deck: full } = await api.get(`/decks?id=${encodeURIComponent(d._id)}`);
+      const bad = overLimit(game.key, full.format, full.cards);
+      if (bad.length) affected.push({ id: d._id, name: full.name, bad });
+    } catch (err) {
+      // se ignora: es solo un aviso
+    }
+  }
+  if (!affected.length) return;
+  const box = el('div', { class: 'list-alert', role: 'alert' },
+    el('strong', { text: 'Las listas de prohibidas/limitadas han cambiado.' }),
+    el('span', { text: ' Mazos afectados: ' }),
+    ...affected.flatMap((a, i) => [i ? ', ' : '', el('button', { type: 'button', class: 'link-btn', text: `${a.name} (${a.bad.length})`, title: a.bad.map((b) => b.name).join(', '), onClick: () => { els.picker.value = a.id; openDeck(a.id); } })]),
+    el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Cerrar', onClick: () => box.remove() })
+  );
+  document.querySelector('.deck-picker').after(box);
 }
 
 async function openDeck(id) {
@@ -645,7 +674,7 @@ async function init() {
 
   buildCatalogSearch();
   // Listas de prohibidas / limitadas (actualizadas automáticamente); al llegar se redibuja lo que dependa de ellas
-  loadBanlists().then(() => {
+  const banlistsReady = loadBanlists().then(() => {
     if (deck) renderZones();
     refreshBadges();
   });
@@ -657,6 +686,7 @@ async function init() {
   }
   showEditor(null);
   setSource('collection');
+  banlistsReady.then(checkListChanges); // necesita los mazos y las listas ya cargados
   // /deck-builder?game=...&deck=<id> abre ese mazo directamente (p. ej. tras copiar un mazo compartido)
   const wanted = new URLSearchParams(window.location.search).get('deck');
   if (wanted) {

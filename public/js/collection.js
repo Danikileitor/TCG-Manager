@@ -20,6 +20,40 @@ const statsBox = document.getElementById('stats');
 let game = null;
 let cards = [];
 let catalogLang = 'en'; // idioma elegido para buscar en el catálogo
+let view = 'collection'; // 'collection' | 'wishlist'
+let wish = []; // lista de deseos de este TCG
+
+const CONDITIONS = [['M', 'M (Mint)'], ['NM', 'NM'], ['EX', 'EX'], ['GD', 'GD'], ['LP', 'LP'], ['PL', 'PL'], ['PO', 'PO']];
+const FINISHES = {
+  mtg: [['normal', 'Normal'], ['foil', 'Foil ✨'], ['etched', 'Etched ✨']],
+  ygo: [['normal', 'Normal'], ['foil', 'Foil ✨'], ['1st', '1ª edición'], ['unlimited', 'Unlimited'], ['limited', 'Limitada']],
+  digimon: [['normal', 'Normal'], ['foil', 'Foil ✨']],
+};
+
+function miniSelect(label, options, value, onChange) {
+  const select = el('select', { class: 'mini-select', 'aria-label': label, title: label });
+  options.forEach(([v, text]) => select.append(el('option', { value: v, text })));
+  if (!options.some(([v]) => v === value)) select.append(el('option', { value, text: value }));
+  select.value = value;
+  select.addEventListener('change', () => onChange(select.value));
+  return select;
+}
+
+// Cambia el estado o el acabado de una copia (si ya había otra igual, el servidor fusiona las cantidades)
+async function changeVariant(card, patch) {
+  try {
+    const { card: updated, mergedFrom } = await api.put('/collection', { id: card._id, ...patch });
+    if (mergedFrom) {
+      cards = cards.filter((c) => c._id !== mergedFrom);
+      Object.assign(cards.find((c) => c._id === updated._id) || {}, updated);
+      toast('Se han fusionado las copias idénticas', 'info');
+    } else Object.assign(card, updated);
+    renderCollection();
+  } catch (err) {
+    toast(err.message, 'error');
+    renderCollection();
+  }
+}
 
 // ---------- Mi colección ----------
 // Cartas visibles según la búsqueda, los filtros y el orden (todo en el navegador)
@@ -41,6 +75,7 @@ function renderStats(list) {
 }
 
 function renderCollection() {
+  if (view === 'wishlist') return renderWishlist();
   clear(collectionGrid);
   const list = visibleCards();
   renderStats(list);
@@ -71,7 +106,10 @@ function renderCollection() {
           { class: 'info' },
           el('div', { class: 'name', text: card.name }),
           el('div', { class: 'meta', text: [card.setCode, card.rarity].filter(Boolean).join(' · ') }),
-          el('div', { class: 'meta', text: `${card.condition} · ${langShort(card.language)} · ${card.finish}` })
+          el('div', { class: 'meta', text: langShort(card.language) }),
+          el('div', { class: 'variant-row' },
+            miniSelect('Estado', CONDITIONS, card.condition, (v) => changeVariant(card, { condition: v })),
+            miniSelect('Acabado', FINISHES[game.key] || FINISHES.mtg, card.finish, (v) => changeVariant(card, { finish: v })))
         ),
         el(
           'div',
@@ -155,8 +193,96 @@ async function removeCard(card) {
   }
 }
 
+// ---------- Wishlist ----------
+async function loadWishlist() {
+  try {
+    ({ cards: wish } = await api.get(`/wishlist?game=${encodeURIComponent(game.key)}`));
+    if (view === 'wishlist') renderCollection();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function renderWishlist() {
+  clear(collectionGrid);
+  const text = filterInput.value;
+  const list = wish.filter((c) => matchesName(c, text));
+  clear(statsBox);
+  statsBox.append(
+    el('span', {}, 'Cartas deseadas: ', el('strong', { text: list.length })),
+    el('span', {}, 'Total de copias: ', el('strong', { text: list.reduce((s, c) => s + c.quantity, 0) }))
+  );
+  if (!list.length) {
+    collectionGrid.append(el('div', { class: 'empty', text: wish.length ? 'Ninguna carta de la wishlist coincide con la búsqueda.' : 'Tu wishlist está vacía. En el catálogo pulsa ♡ en las cartas que quieras conseguir.' }));
+    return;
+  }
+  list.forEach((card) => {
+    const minus = el('button', { type: 'button', text: '−', 'aria-label': 'Quitar una copia', onClick: () => changeWishQty(card, -1) });
+    minus.disabled = card.quantity <= 1;
+    collectionGrid.append(
+      el('article', { class: 'tcg-card' }, cardThumb(card),
+        el('div', { class: 'info' }, el('div', { class: 'name', text: card.name }), el('div', { class: 'meta', text: [card.setCode, card.rarity].filter(Boolean).join(' · ') }), el('div', { class: 'meta', text: langShort(card.language) })),
+        el('div', { class: 'actions' },
+          el('span', { class: 'qty' }, minus, el('span', { text: `x${card.quantity}` }), el('button', { type: 'button', text: '+', 'aria-label': 'Añadir una copia', onClick: () => changeWishQty(card, 1) })),
+          el('button', { class: 'btn btn-sm', type: 'button', text: 'La tengo', title: 'Pasarla a mi colección', onClick: () => wishToCollection(card) }),
+          el('button', { class: 'btn btn-danger btn-sm btn-icon', type: 'button', title: 'Quitar de la wishlist', 'aria-label': 'Quitar de la wishlist', onClick: () => removeWish(card) }, trashIcon())))
+    );
+  });
+}
+
+async function changeWishQty(card, delta) {
+  try {
+    const { card: updated } = await api.put('/wishlist', { id: card._id, quantity: card.quantity + delta });
+    Object.assign(card, updated);
+    renderCollection();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function removeWish(card) {
+  try {
+    await api.del(`/wishlist?id=${encodeURIComponent(card._id)}`);
+    wish = wish.filter((c) => c._id !== card._id);
+    renderCollection();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function wishToCollection(card) {
+  try {
+    await addFromCatalog({ ...card, language: card.language, quantity: card.quantity }, card.quantity, true);
+    await api.del(`/wishlist?id=${encodeURIComponent(card._id)}`);
+    wish = wish.filter((c) => c._id !== card._id);
+    renderCollection();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function addToWishlist(result) {
+  try {
+    await api.post('/wishlist', { game: game.key, cardId: result.cardId, name: result.name, altName: result.altName || '', imageUrl: result.imageUrl, imageBack: result.imageBack || '', backKind: result.backKind || '', setCode: result.setCode, number: result.number || '', rarity: result.rarity, language: result.language || catalogLang, quantity: 1 });
+    toast(`${result.name} añadida a la wishlist`, 'success');
+    loadWishlist();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+document.getElementById('view-switch').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn || btn.dataset.view === view) return;
+  view = btn.dataset.view;
+  [...e.currentTarget.children].forEach((b) => b.classList.toggle('active', b === btn));
+  document.getElementById('filters-mount').classList.toggle('hidden', view === 'wishlist');
+  sortSelect.classList.toggle('hidden', view === 'wishlist');
+  renderCollection();
+});
+
 // ---------- Catálogo ----------
-async function addFromCatalog(result) {
+async function addFromCatalog(result, quantity = 1, silent = false) {
   try {
     await api.post('/collection', {
       game: game.key,
@@ -172,11 +298,12 @@ async function addFromCatalog(result) {
       rarity: result.rarity,
       facets: result.facets || undefined,
       language: result.language || catalogLang, // idioma de esta copia (nombre e imagen oficiales)
-      quantity: 1,
+      quantity,
     });
-    toast(`${result.name} añadida`, 'success');
+    if (!silent) toast(`${result.name} añadida`, 'success');
     loadCollection();
   } catch (err) {
+    if (silent) throw err;
     toast(err.message, 'error');
   }
 }
@@ -191,7 +318,10 @@ function buildCatalogSearch() {
     resultList,
     idleMessage: 'Busca una carta por nombre o usa los filtros para añadirla a tu colección.',
     search: (req) => searchCatalog(game.key, req.query, catalogLang, req),
-    renderAction: (card) => el('button', { class: 'btn btn-sm', type: 'button', text: 'Añadir', onClick: () => addFromCatalog(card) }),
+    renderAction: (card) =>
+      el('div', { class: 'result-actions' },
+        el('button', { class: 'btn btn-sm', type: 'button', text: 'Añadir', onClick: () => addFromCatalog(card) }),
+        el('button', { class: 'btn btn-sm btn-ghost', type: 'button', text: '♡', title: 'Añadir a la wishlist', 'aria-label': 'Añadir a la wishlist', onClick: () => addToWishlist(card) })),
   });
 }
 
@@ -251,6 +381,7 @@ async function init() {
   document.getElementById('filters-active').append(filters.activeBox);
 
   loadCollection();
+  loadWishlist();
 }
 
 initCardPreview();

@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="DNK TCG Manager">
   <meta name="theme-color" content="#000000">
   <link rel="manifest" href="/site.webmanifest">
+  <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/app.css">
 </head>
@@ -27,7 +28,10 @@
 
     <div class="layout-two">
       <section class="panel">
-        <h2>Mis cartas</h2>
+        <div class="source-switch" id="view-switch" role="tablist">
+          <button type="button" class="active" data-view="collection">Mi colección</button>
+          <button type="button" data-view="wishlist">Wishlist</button>
+        </div>
         <div id="stats" class="stats"></div>
         <div class="toolbar">
           <input id="filter-input" type="search" placeholder="Buscar en mi colección…" aria-label="Buscar en mi colección">

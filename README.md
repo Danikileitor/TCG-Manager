@@ -211,6 +211,17 @@ Código en `public/js/deck-stats.js` (se carga solo al abrir el diálogo).
 - **Compartir**: el botón *Compartir* de un mazo guardado crea un enlace público de solo lectura (`/d/<código>`). Quien lo abre ve las cartas (con vista previa), puede copiar la lista y, si tiene cuenta, copiarlo a sus mazos. No se muestra tu usuario. *Dejar de compartir* desactiva el enlace al instante. El enlace muestra la última versión guardada. Backend: `netlify/functions/shared-deck.js` (pública) y el campo `shareId` de `decks.js`; página `public/shared.html`.
 - **Historial**: cada vez que guardas un mazo con cambios en las cartas se conserva la versión anterior (las 15 últimas, campo `history` en MongoDB, que no viaja en el listado). *Historial* → *Restaurar* carga esa versión en el editor; queda sin guardar hasta que pulses *Guardar mazo*.
 
+### Wishlist, estado y acabado
+
+- En **Mi colección** cada carta tiene selectores de **Estado** (M, NM, EX, GD, LP, PL, PO) y **Acabado** (Normal, Foil, Etched / 1ª edición según el TCG). Si cambias uno y ya tenías otra copia idéntica, el servidor fusiona las cantidades.
+- **Wishlist**: pestaña junto a *Mi colección*. En el catálogo, el botón ♡ añade la carta; en la lista puedes subir/bajar copias, quitarla o pulsar *La tengo* (pasa a la colección). En *Estadísticas → Qué me falta* hay un botón para añadir todas las faltantes a la wishlist. Backend: `netlify/functions/wishlist.js` (colección `wishlist` de MongoDB, separada de la colección).
+
+### Tema claro/oscuro, uso sin conexión y avisos de listas
+
+- **Tema**: botón ☀️/🌙 en la cabecera. Sin elección guardada se sigue el tema del sistema. `public/js/theme.js` se carga en `<head>` para no parpadear.
+- **Sin conexión (PWA)**: `public/sw.js` guarda páginas, JS, CSS e imágenes propias (se actualizan en segundo plano) y, para tus datos (`/api/collection`, `decks`, `wishlist`...), usa primero la red y, sin conexión, lo último guardado; así se puede consultar la colección y los mazos. Escribir cambios sí requiere conexión. Esa caché de datos se borra al **cerrar sesión**. Si cambias el comportamiento del service worker, sube la versión de `STATIC`/`API` en `sw.js`.
+- **Avisos de listas**: en el editor de mazos (Yu-Gi-Oh! y Digimon), si las listas de prohibidas/limitadas han cambiado desde tu última visita, un aviso indica qué mazos tienen ahora cartas prohibidas o por encima del límite. En MTG no hay aviso global porque la legalidad se consulta por carta; el editor sí avisa dentro de cada mazo.
+
 ### Prohibidas, limitadas y formato Digimon C / U
 
 En el buscador del editor de mazos, cada carta afectada por la lista del formato elegido muestra en la esquina superior derecha de su imagen un símbolo rojo de prohibido (🚫) o un número amarillo dentro de un círculo rojo (1, 2 o 3 copias). Al cambiar de formato las insignias se actualizan. La misma marca aparece en cada carta del mazo, justo a la izquierda del selector de copias. Además, el editor **no deja añadir** cartas prohibidas ni pasar del límite (mensaje al pulsar "+ Mazo"), y avisa si un mazo importado o cambiado de formato incluye cartas ilegales.

@@ -66,6 +66,19 @@ export function loadBanlists() {
   return loading;
 }
 
+// Huella de las listas de un juego (para saber si han cambiado desde la última visita). MTG no tiene: va por carta.
+export function listsFingerprint(gameKey) {
+  if (!lists) return null;
+  let raw = '';
+  if (gameKey === 'ygo') raw = JSON.stringify(Object.entries(lists.ygo).sort());
+  else if (gameKey === 'digimon') raw = JSON.stringify([[...lists.digimon.banned].sort(), [...lists.digimon.limited].sort(), lists.digimon.pairs]);
+  else return null;
+  if (raw === '[]') return null; // sin datos (p. ej. la API no respondió): no se compara
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) h = ((h << 5) + h + raw.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
 // ---------- MTG: legalidad por carta (Scryfall) ----------
 // Las cartas que vienen del buscador de Scryfall ya traen `legalities`; las de la colección o de un mazo guardado no.
 export async function ensureLegalities(cards) {

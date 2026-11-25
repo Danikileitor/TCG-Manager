@@ -187,6 +187,22 @@ exports.handler = async (event) => {
       }
       if (body.notes !== undefined) update.notes = str(body.notes, 500);
       if (CONDITIONS.includes(body.condition)) update.condition = body.condition;
+      if (FINISHES.includes(body.finish)) update.finish = body.finish;
+
+      // Cambiar estado o acabado cambia la "variante" de la carta: si ya existe otra igual, se fusionan las copias
+      if (update.condition || update.finish) {
+        const own = await col.findOne({ _id: new ObjectId(body.id), userId: user.id });
+        if (!own) return json(404, { error: 'Carta no encontrada' });
+        const other = await col.findOne({
+          userId: user.id, game: own.game, cardId: own.cardId, language: own.language,
+          finish: update.finish || own.finish, condition: update.condition || own.condition, _id: { $ne: own._id },
+        });
+        if (other) {
+          const merged = await col.findOneAndUpdate({ _id: other._id }, { $inc: { quantity: update.quantity || own.quantity }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' });
+          await col.deleteOne({ _id: own._id });
+          return json(200, { card: merged, mergedFrom: String(own._id) });
+        }
+      }
 
       // Siempre filtramos por userId del token, nunca por uno enviado por el cliente
       const result = await col.findOneAndUpdate(
