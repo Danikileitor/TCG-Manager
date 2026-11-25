@@ -236,7 +236,7 @@ El botón **Partida de prueba** del editor abre una mesa en solitario (2D) para 
 **Tablero propio de cada juego** (2D y 3D usan la misma descripción, `LAYOUTS` en `public/js/playtest-logic.js`):
 - **Magic**: columna de pilas (biblioteca, cementerio, exilio, zona de mando), área de *criaturas y otros permanentes* y fila aparte para las *tierras*.
 - **Yu-Gi-Oh!**: tapete oficial: 2 zonas de monstruo extra, 5 de monstruos, 5 de magias/trampas, magia de campo, cementerio, desterradas, Deck y Extra Deck. Cada carta cae en su hueco (monstruo / magia-trampa / campo según su tipo) o en el hueco donde la sueltes.
-- **Digimon**: mazo y **seguridad** arriba, zona de **cría** (Digi-Egg), zona de **batalla** y fila de tamers/opciones.
+- **Digimon** (tapete oficial): pila de **seguridad** a la izquierda, **zona de batalla** grande en el centro (ahí van también los tamers y opciones, que no tienen zona propia), **Mazo** sobre **Descarte** a la derecha y, abajo, el **Digi-Egg Deck** junto a la **zona de cría**.
 Si el mazo guardado no trae los tipos de las cartas (Magic / Yu-Gi-Oh!), se consultan al abrir la partida (máx. 4 s) para poder repartirlas por zonas. Al jugar una carta (doble clic) va sola a su área; al arrastrarla puedes elegir área y hueco. La mesa 3D usa una inclinación suave (28°) y colores propios de cada juego.
 **Botón de tema**: ahora usa iconos SVG (sol/luna) para que queden centrados en cualquier sistema.
 

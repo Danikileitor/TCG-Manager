@@ -42,16 +42,18 @@ export const LAYOUTS = {
       { kind: 'pile', zone: 'library', c: 6, r: 2 },
     ],
   },
-  // Digimon: seguridad y mazo a un lado, zona de cría, zona de batalla y tamers
+  // Digimon (tapete oficial): pila de seguridad a la izquierda, zona de batalla grande en el centro (ahí van también tamers y
+  // opciones, no tienen zona propia), Mazo sobre Descarte a la derecha y, abajo a la izquierda, el mazo de Digi-Egg junto a la zona de cría
   digimon: {
-    cols: 9, rows: 4, theme: 'digimon',
+    cols: 8, rows: 4, theme: 'digimon',
     cells: [
-      { kind: 'pile', zone: 'library', c: 0, r: 0 }, { kind: 'pile', zone: 'graveyard', c: 0, r: 1 },
-      { kind: 'pile', zone: 'exile', c: 0, r: 2 }, { kind: 'pile', zone: 'extra', c: 0, r: 3 },
-      { kind: 'pile', zone: 'security', c: 1, r: 0 },
-      { kind: 'free', area: 'tamer', label: 'Tamers y opciones', c: 2, r: 0, w: 7, h: 1 },
-      { kind: 'slots', area: 'breeding', label: 'Cría', cells: [[1, 2]] },
-      { kind: 'free', area: 'battle', label: 'Zona de batalla', c: 2, r: 1, w: 7, h: 3 },
+      { kind: 'pile', zone: 'security', c: 0, r: 0 },
+      { kind: 'pile', zone: 'exile', c: 0, r: 1 },
+      { kind: 'free', area: 'battle', label: 'Zona de batalla', c: 1, r: 0, w: 6, h: 3 },
+      { kind: 'pile', zone: 'library', c: 7, r: 1 },
+      { kind: 'pile', zone: 'graveyard', c: 7, r: 2 },
+      { kind: 'pile', zone: 'extra', c: 1, r: 3 },
+      { kind: 'slots', area: 'breeding', label: 'Zona de cría', cells: [[2, 3]] },
     ],
   },
 };
@@ -78,7 +80,6 @@ export function areaFor(gameKey, card) {
   }
   if (gameKey === 'digimon') {
     if (card.zone === 'digi-egg' || has('Digi-Egg')) return 'breeding';
-    if (has('Tamer') || has('Option')) return 'tamer';
     return 'battle';
   }
   return 'field';
