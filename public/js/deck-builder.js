@@ -558,6 +558,14 @@ document.getElementById('hand-btn').addEventListener('click', async () => {
   openHandSimulator({ gameKey: game.key, deck: current });
 });
 
+// ---------- Partida de prueba (mesa en solitario) ----------
+document.getElementById('playtest-btn').addEventListener('click', async () => {
+  const current = currentDeckForExport();
+  if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para probarlo', 'error');
+  const { openPlaytest } = await import('./playtest.js');
+  openPlaytest({ gameKey: game.key, deck: current });
+});
+
 // ---------- Estadísticas, probabilidades y "qué me falta" ----------
 document.getElementById('stats-btn').addEventListener('click', async () => {
   const current = currentDeckForExport();

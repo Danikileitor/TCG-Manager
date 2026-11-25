@@ -222,6 +222,17 @@ Código en `public/js/deck-stats.js` (se carga solo al abrir el diálogo).
 - **Sin conexión (PWA)**: `public/sw.js` guarda páginas, JS, CSS e imágenes propias (se actualizan en segundo plano) y, para tus datos (`/api/collection`, `decks`, `wishlist`...), usa primero la red y, sin conexión, lo último guardado; así se puede consultar la colección y los mazos. Escribir cambios sí requiere conexión. Esa caché de datos se borra al **cerrar sesión**. Si cambias el comportamiento del service worker, sube la versión de `STATIC`/`API` en `sw.js`.
 - **Avisos de listas**: en el editor de mazos (Yu-Gi-Oh! y Digimon), si las listas de prohibidas/limitadas han cambiado desde tu última visita, un aviso indica qué mazos tienen ahora cartas prohibidas o por encima del límite. En MTG no hay aviso global porque la legalidad se consulta por carta; el editor sí avisa dentro de cada mazo.
 
+### Partida de prueba
+
+El botón **Partida de prueba** del editor abre una mesa en solitario (2D) para practicar el mazo: mano inicial, biblioteca, campo, cementerio, exilio y la zona propia de cada juego (zona de mando en MTG, Extra Deck en Yu-Gi-Oh!, Digi-Egg Deck y pila de **seguridad** de 5 cartas en Digimon).
+
+- **Robar**: botón, tecla `D` o clic en la pila de la biblioteca. También robar N, **moler** N (a cementerio), barajar y **siguiente turno** (endereza el campo y roba).
+- **Mover cartas**: arrastrar y soltar entre zonas, doble clic (de la mano al campo; en el campo, girar/enderezar), o clic / clic derecho para el menú (mover a cualquier zona, arriba o fondo de la biblioteca, boca abajo). Al pasar el ratón se ve la carta en grande.
+- **Mulligan** según el juego (Londres en MTG, uno solo en Digimon, ninguno en Yu-Gi-Oh!), **Deshacer** (`Ctrl+Z`, 60 pasos) y **Reiniciar**.
+- Clic en una pila (o *Ver biblioteca*) abre un panel para ver y buscar sus cartas, útil para "buscar" una carta en el mazo.
+
+Lógica sin DOM en `public/js/playtest-logic.js` y mesa en `public/js/playtest.js` (carga bajo demanda). Es una mesa libre: no aplica reglas del juego ni controla fases o contadores.
+
 ### Valor de la colección (MTG)
 
 En *Mi colección* de MTG, el botón **Calcular valor** suma el precio (Cardmarket, euros, vía Scryfall) de las cartas visibles según el filtro. Se calcula a petición porque pide los precios en tandas de 75 cartas (una colección grande tarda unos segundos; se muestra el progreso). Código compartido con las estadísticas del mazo en `public/js/prices.js`. No distingue foil/normal (usa el precio de la carta normal, o foil si no hay otro).
