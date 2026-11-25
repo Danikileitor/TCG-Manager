@@ -8,6 +8,18 @@ function str(value, max = 200) {
   return String(value ?? '').trim().slice(0, max);
 }
 
+// Datos de la carta para las estadísticas del mazo (mismo formato que en la colección)
+function num(v) {
+  return v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.max(-999999, Math.min(9999999, Number(v)));
+}
+function strList(v, maxItems = 12) {
+  return Array.isArray(v) ? [...new Set(v.map((x) => str(x, 40)).filter(Boolean))].slice(0, maxItems) : [];
+}
+function sanitizeFacets(f) {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
+  return { colors: strList(f.colors, 6), types: strList(f.types, 12), subtypes: strList(f.subtypes, 16), attribute: str(f.attribute, 40), cost: num(f.cost), level: num(f.level), power: num(f.power) };
+}
+
 // Valida y normaliza las cartas del mazo según las zonas del TCG
 function sanitizeCards(cards, game) {
   const gameDef = DEFAULT_GAMES.find((g) => g.key === game);
@@ -25,6 +37,7 @@ function sanitizeCards(cards, game) {
     imageBack: str(c.imageBack, 500),
     backKind: str(c.backKind, 20),
     language: VALID_LANGUAGES.includes(c.language) ? c.language : 'en',
+    facets: sanitizeFacets(c.facets),
     quantity: Math.max(1, Math.min(99, parseInt(c.quantity, 10) || 1)),
     zone: zones.includes(c.zone) ? c.zone : 'main',
   })).filter((c) => c.cardId && c.name);

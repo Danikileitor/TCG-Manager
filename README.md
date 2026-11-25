@@ -195,6 +195,16 @@ El editor de mazos no deja pasar del límite de copias (el botón "+ Mazo" avisa
 
 Al importar un mazo se recortan las copias que pasen del límite del formato (se avisa de cuántas). Si cambias a un formato más estricto, las copias de más no se borran: se muestra un aviso. Las listas de prohibidas/limitadas se suman a este límite (siguiente apartado). Reglas en `public/js/deck-rules.js`.
 
+### Estadísticas, probabilidades y "qué me falta"
+
+El botón **Estadísticas** del editor de mazos abre un diálogo con tres pestañas:
+
+- **Estadísticas**: curva de coste (MTG, sin tierras; Digimon por coste de juego; Yu-Gi-Oh! por nivel de los monstruos), reparto de colores o atributos y de tipos. Las cartas guardadas antes de existir esto se completan una vez (Scryfall, archivos locales de YGO o la API de Digimon) y desde ahí se guardan con el mazo (`facets`).
+- **Probabilidades**: calculadora hipergeométrica. Eliges una carta y cuántas copias quieres ver y muestra la probabilidad por turno (1 a 8), con mano inicial de 7 (MTG) o 5 (Yu-Gi-Oh!, Digimon), yendo primero o segundo.
+- **Qué me falta**: compara el mazo con tu colección (por nombre en MTG/YGO y por número de carta en Digimon, sin importar edición) y da la lista de compra, que se puede copiar o descargar en `.txt`.
+
+Código en `public/js/deck-stats.js` (se carga solo al abrir el diálogo).
+
 ### Prohibidas, limitadas y formato Digimon C / U
 
 En el buscador del editor de mazos, cada carta afectada por la lista del formato elegido muestra en la esquina superior derecha de su imagen un símbolo rojo de prohibido (🚫) o un número amarillo dentro de un círculo rojo (1, 2 o 3 copias). Al cambiar de formato las insignias se actualizan. La misma marca aparece en cada carta del mazo, justo a la izquierda del selector de copias. Además, el editor **no deja añadir** cartas prohibidas ni pasar del límite (mensaje al pulsar "+ Mazo"), y avisa si un mazo importado o cambiado de formato incluye cartas ilegales.

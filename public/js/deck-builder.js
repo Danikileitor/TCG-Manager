@@ -330,6 +330,7 @@ function addCardToDeck(card, zoneOverride) {
       imageBack: card.imageBack || '',
       backKind: card.backKind || '',
       language: card.language || catalogLang,
+      facets: card.facets || null, // coste, colores, tipos... para las estadísticas
       quantity: 1,
       zone,
     });
@@ -523,6 +524,14 @@ document.getElementById('hand-btn').addEventListener('click', async () => {
   if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para simular una mano', 'error');
   const { openHandSimulator } = await import('./hand-sim.js');
   openHandSimulator({ gameKey: game.key, deck: current });
+});
+
+// ---------- Estadísticas, probabilidades y "qué me falta" ----------
+document.getElementById('stats-btn').addEventListener('click', async () => {
+  const current = currentDeckForExport();
+  if (!current || !current.cards.length) return toast('Añade cartas al mazo para ver sus estadísticas', 'error');
+  const { openDeckStats } = await import('./deck-stats.js');
+  openDeckStats({ gameKey: game.key, deck: current });
 });
 
 // ---------- Eventos ----------

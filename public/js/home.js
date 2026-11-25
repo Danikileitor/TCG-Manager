@@ -45,6 +45,7 @@ function init() {
     });
 
   sessionPromise.then((user) => {
+    // (el saludo ya se pintó al instante con el último usuario conocido; aquí solo se confirma)
     document.getElementById('welcome').textContent = `Hola, ${user.username}`;
   });
 }
