@@ -559,12 +559,14 @@ document.getElementById('hand-btn').addEventListener('click', async () => {
 });
 
 // ---------- Partida de prueba (mesa en solitario) ----------
-document.getElementById('playtest-btn').addEventListener('click', async () => {
+async function startPlaytest(mode) {
   const current = currentDeckForExport();
   if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para probarlo', 'error');
   const { openPlaytest } = await import('./playtest.js');
-  openPlaytest({ gameKey: game.key, deck: current });
-});
+  openPlaytest({ gameKey: game.key, deck: current, mode });
+}
+document.getElementById('playtest-btn').addEventListener('click', () => startPlaytest('2d'));
+document.getElementById('playtest3d-btn').addEventListener('click', () => startPlaytest('3d'));
 
 // ---------- Estadísticas, probabilidades y "qué me falta" ----------
 document.getElementById('stats-btn').addEventListener('click', async () => {

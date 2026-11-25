@@ -25,7 +25,7 @@ function loadImg(url, cors) {
 
 const imageCache = new Map(); // url -> Promise<{ img, cors } | null>
 // Devuelve la mejor imagen disponible: primero una legible por WebGL (CORS); si ninguna lo es, una cualquiera
-function loadCardImage(url) {
+export function loadCardImage(url) {
   if (!url) return Promise.resolve(null);
   if (!imageCache.has(url)) {
     imageCache.set(url, (async () => {
@@ -81,7 +81,7 @@ function measureMargins(img) {
   }
 }
 
-function fitFor(src, measure = true) {
+export function fitFor(src, measure = true) {
   const iw = src.naturalWidth || src.width || 1;
   const ih = src.naturalHeight || src.height || 1;
   const m = measure ? measureMargins(src) : { l: 0, r: 0, t: 0, b: 0 };
@@ -97,7 +97,7 @@ function fitFor(src, measure = true) {
 }
 
 // Carta sin imagen: se dibuja el nombre
-function placeholderCanvas(name) {
+export function placeholderCanvas(name) {
   const c = document.createElement('canvas');
   c.width = 366;
   c.height = 512;

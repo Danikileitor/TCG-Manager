@@ -231,6 +231,8 @@ El botón **Partida de prueba** del editor abre una mesa en solitario (2D) para 
 - **Mulligan** según el juego (Londres en MTG, uno solo en Digimon, ninguno en Yu-Gi-Oh!), **Deshacer** (`Ctrl+Z`, 60 pasos) y **Reiniciar**.
 - Clic en una pila (o *Ver biblioteca*) abre un panel para ver y buscar sus cartas, útil para "buscar" una carta en el mazo.
 
+**Mesa 3D (HTML5 canvas / WebGL)**: el botón está partido en dos mitades; la izquierda ("Partida de prueba") abre la mesa 2D y la derecha (**3D**) la misma partida sobre una mesa inclinada en 3D. Se maneja igual: clic en la pila de la biblioteca para robar, arrastrar una carta hasta una zona (pilas, campo, mano) para moverla, doble clic para jugarla o girarla, clic o clic derecho para el menú (incluye *Ver en grande (3D)*). Las cartas de la mano se levantan al pasar el ratón. El botón *Vista 2D/3D* de la barra cambia de modo sin perder la partida. Si el navegador no tiene WebGL se usa la mesa 2D. Escena en `public/js/playtest3d.js` (se descarga solo en modo 3D).
+
 Lógica sin DOM en `public/js/playtest-logic.js` y mesa en `public/js/playtest.js` (carga bajo demanda). Es una mesa libre: no aplica reglas del juego ni controla fases o contadores.
 
 ### Valor de la colección (MTG)

@@ -2,10 +2,10 @@
 // La lógica está en playtest-logic.js; aquí solo se dibuja y se gestionan los clics y el arrastrar y soltar.
 import { el, clear, toast, markPreviewable, safeImageUrl } from './ui.js';
 import { betterImageUrl } from './card-images.js';
-import { findDefaultBack } from './card-viewer.js';
+import { findDefaultBack, openCardViewer } from './card-viewer.js';
 import { createPlaytest, defsFor } from './playtest-logic.js';
 
-export async function openPlaytest({ gameKey, deck }) {
+export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
   const pt = createPlaytest(deck.cards, gameKey);
   if (pt.total === 0) return toast('El mazo no tiene cartas en la zona principal', 'error');
   const defs = defsFor(gameKey);
@@ -22,12 +22,13 @@ export async function openPlaytest({ gameKey, deck }) {
   document.body.append(dialog);
   dialog.showModal();
 
+  let scene = null; // escena 3D (solo en modo 3D)
   let panelZone = null; // zona abierta en el panel lateral
   let panelFilter = '';
-  const close = () => { dialog.close(); dialog.remove(); };
+  const close = () => { if (scene) scene.dispose(); dialog.close(); dialog.remove(); };
   dialog.addEventListener('cancel', () => setTimeout(() => dialog.remove(), 0));
   document.addEventListener('keydown', onKey);
-  dialog.addEventListener('close', () => document.removeEventListener('keydown', onKey));
+  dialog.addEventListener('close', () => { document.removeEventListener('keydown', onKey); if (scene) scene.dispose(); });
   function onKey(e) {
     if (!dialog.isConnected || e.target.closest('input, textarea, select')) return;
     if (e.key === 'd' || e.key === 'D') act(() => pt.draw(1));
@@ -71,6 +72,7 @@ export async function openPlaytest({ gameKey, deck }) {
     clear(menu);
     const item = (text, fn) => menu.append(el('button', { type: 'button', role: 'menuitem', text, onClick: () => act(fn) }));
     menu.append(el('div', { class: 'pt-menu-title', text: card.faceDown ? 'Carta boca abajo' : card.name }));
+    if (!card.faceDown && card.imageUrl) menu.append(el('button', { type: 'button', role: 'menuitem', text: 'Ver en grande (3D)', onClick: () => { hideMenu(); openCardViewer({ name: card.name, imageUrl: card.imageUrl, imageBack: card.imageBack, backKind: card.backKind }); } }));
     if (zone === 'field') item(card.tapped ? 'Enderezar' : 'Girar', () => pt.toggleTap(card.uid));
     item(card.faceDown ? 'Poner boca arriba' : 'Poner boca abajo', () => pt.toggleFace(card.uid));
     Object.keys(L).filter((z) => z !== zone && z !== 'library').forEach((z) => item(`→ ${L[z]}`, () => pt.move(card.uid, z)));
@@ -152,6 +154,7 @@ export async function openPlaytest({ gameKey, deck }) {
     bar.append(
       el('strong', { class: 'pt-title', text: `Partida de prueba · ${deck.name || 'Mazo'}` }),
       el('span', { class: 'pt-turn', text: `Turno ${pt.turn}` }),
+      el('button', { type: 'button', class: 'btn btn-sm btn-ghost', text: mode === '3d' ? 'Vista 2D' : 'Vista 3D', onClick: () => switchMode(mode === '3d' ? '2d' : '3d') }),
       b('Robar (D)', () => pt.draw(1)),
       b('Robar', () => pt.draw(nVal())), n,
       b('Moler', () => pt.mill(nVal()), { title: `Las cartas de arriba de ${L.library} van a ${L.graveyard}` }),
@@ -162,6 +165,11 @@ export async function openPlaytest({ gameKey, deck }) {
       el('button', { type: 'button', class: 'hs-close', text: '✕', title: 'Cerrar (Esc)', 'aria-label': 'Cerrar', onClick: close })
     );
 
+    if (mode === '3d' && scene) {
+      scene.sync();
+      renderPanel();
+      return;
+    }
     clear(board);
     const piles = el('div', { class: 'pt-piles' });
     ['library', 'graveyard', 'exile', 'extra', 'security'].filter((z) => pt.zones[z]).forEach((z) => piles.append(pile(z)));
@@ -177,5 +185,37 @@ export async function openPlaytest({ gameKey, deck }) {
     renderPanel();
   }
 
+  async function startScene() {
+    const { createScene } = await import('./playtest3d.js'); // WebGL solo se descarga en modo 3D
+    clear(board);
+    const stage = el('div', { class: 'pt3d-stage' });
+    board.append(stage);
+    try {
+      scene = createScene({
+        stage, pt, L, gameKey,
+        getBackUrl: () => findDefaultBack(''),
+        onMenu: (card, zone, x, y) => openMenu(card, zone, x, y),
+        onDouble: (card, zone) => act(() => (zone === 'field' ? pt.toggleTap(card.uid) : pt.move(card.uid, 'field'))),
+        onPile: (zone) => (zone === 'library' ? act(() => pt.draw(1)) : openPanel(zone)),
+        onDrop: (uid, zone) => act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end')),
+      });
+      dialog._scene = scene; // (para pruebas)
+      return true;
+    } catch (err) {
+      scene = null;
+      toast('Tu navegador no puede mostrar la vista 3D: se usa la 2D', 'error');
+      return false;
+    }
+  }
+
+  async function switchMode(next) {
+    if (next === mode) return;
+    if (scene) { scene.dispose(); scene = null; }
+    mode = next;
+    if (mode === '3d' && !(await startScene())) mode = '2d';
+    render();
+  }
+
+  if (mode === '3d' && !(await startScene())) mode = '2d';
   render();
 }
