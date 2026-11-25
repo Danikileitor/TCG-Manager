@@ -24,6 +24,33 @@ export function probAtLeast(D, K, n, k = 1) {
   return Math.min(1, p);
 }
 
+// ---------- Precios (solo MTG: Scryfall incluye el precio de Cardmarket en cada carta) ----------
+const priceCache = new Map();
+async function mtgPrices(cards) {
+  const ids = [...new Set(cards.map((c) => c.cardId))].filter((id) => /^[0-9a-f-]{36}$/i.test(id) && !priceCache.has(id));
+  for (let i = 0; i < ids.length; i += 75) {
+    try {
+      const res = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ identifiers: ids.slice(i, i + 75).map((id) => ({ id })) }),
+      });
+      if (!res.ok) break;
+      const data = await res.json();
+      (data.data || []).forEach((c) => {
+        const p = c.prices || {};
+        const eur = parseFloat(p.eur || p.eur_foil);
+        priceCache.set(c.id, Number.isFinite(eur) ? eur : null);
+      });
+    } catch (err) {
+      break;
+    }
+    if (i + 75 < ids.length) await new Promise((r) => setTimeout(r, 120));
+  }
+  return priceCache;
+}
+const euro = (n) => `${n.toFixed(2).replace('.', ',')} €`;
+
 const HAND = { mtg: 7, ygo: 5, digimon: 5 };
 const pct = (p) => `${(p * 100).toFixed(p >= 0.995 || p === 0 ? 0 : 1)} %`;
 
@@ -139,7 +166,7 @@ async function missingPane(gameKey, deck) {
     const need = new Map();
     deck.cards.forEach((c) => {
       const key = copyKey(gameKey, c);
-      if (!need.has(key)) need.set(key, { name: c.altName || c.name, label: displayName(c, gameKey), qty: 0 });
+      if (!need.has(key)) need.set(key, { id: c.cardId, name: c.altName || c.name, label: displayName(c, gameKey), qty: 0 });
       need.get(key).qty += c.quantity;
     });
     const missing = [...need.entries()]
@@ -150,15 +177,21 @@ async function missingPane(gameKey, deck) {
     const total = missing.reduce((s, m) => s + m.miss, 0);
     if (!missing.length) return pane.append(el('p', { text: '¡Tienes todas las cartas del mazo en tu colección!' })) || pane;
     const text = missing.map((m) => `${m.miss} ${m.name}`).join('\n');
+    const prices = gameKey === 'mtg' ? await mtgPrices(deck.cards) : new Map();
+    let cost = 0;
     const list = el('ul', { class: 'st-missing' });
-    missing.forEach((m) => list.append(el('li', {}, el('strong', { text: `${m.miss}×` }), ` ${m.label}`)));
+    missing.forEach((m) => {
+      const price = prices.get(m.id);
+      if (price != null) cost += price * m.miss;
+      list.append(el('li', {}, el('strong', { text: `${m.miss}×` }), ` ${m.label}`, price != null ? el('span', { class: 'muted', text: ` · ${euro(price)} c/u` }) : null));
+    });
     const copy = el('button', { type: 'button', class: 'btn btn-sm', text: 'Copiar lista', onClick: () => navigator.clipboard.writeText(text).then(() => toast('Lista copiada', 'info'), () => toast('No se pudo copiar', 'error')) });
     const download = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', text: 'Descargar .txt', onClick: () => {
       const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
       const a = el('a', { href: url, download: `lista-compra-${deck.name || 'mazo'}.txt` });
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
     } });
-    pane.append(el('p', { text: `Te faltan ${total} copias (${missing.length} cartas distintas) respecto a tu colección.` }), list, el('div', { class: 'toolbar' }, copy, download));
+    pane.append(el('p', { text: `Te faltan ${total} copias (${missing.length} cartas distintas) respecto a tu colección${cost ? `. Coste aproximado: ${euro(cost)}` : ''}.` }), list, el('div', { class: 'toolbar' }, copy, download));
   } catch (err) {
     clear(pane);
     pane.append(el('p', { class: 'tr-error', text: err.message }));
@@ -211,5 +244,13 @@ async function statsPane(gameKey, deck) {
   const total = main.reduce((s, c) => s + c.quantity, 0);
   pane.append(el('p', { class: 'muted st-wide', text: `${total} cartas en el mazo principal${ready.length < main.length ? ` · ${main.length - ready.length} sin datos (no se pudieron consultar)` : ''}.` }));
   distributions(gameKey, ready).forEach((n) => pane.append(n));
+  if (gameKey === 'mtg') {
+    const prices = await mtgPrices(deck.cards);
+    const priced = deck.cards.filter((c) => prices.get(c.cardId) != null);
+    const value = priced.reduce((s, c) => s + prices.get(c.cardId) * c.quantity, 0);
+    pane.append(el('p', { class: 'st-wide', text: `Valor estimado del mazo: ${euro(value)} (precios de Cardmarket vía Scryfall${priced.length < deck.cards.length ? `; ${deck.cards.length - priced.length} cartas sin precio` : ''}).` }));
+  } else {
+    pane.append(el('p', { class: 'muted st-wide', text: 'Los precios solo están disponibles para MTG.' }));
+  }
   return pane;
 }

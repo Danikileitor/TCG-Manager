@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mazo compartido · TCG Manager</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header id="app-header" class="app-header"><a class="brand" href="/"><img class="brand-logo" src="/favicon-96x96.png" alt="">TCG Manager</a></header>
+
+  <main class="page-main">
+    <div class="page-title">
+      <h1 id="deck-title">Mazo compartido</h1>
+    </div>
+    <section class="panel shared-deck">
+      <p id="deck-sub" class="muted"></p>
+      <p id="deck-desc"></p>
+      <div class="toolbar">
+        <button id="copy-btn" class="btn hidden" type="button">Copiar a mis mazos</button>
+        <button id="export-btn" class="btn btn-ghost hidden" type="button">Copiar lista</button>
+        <a id="login-link" class="btn btn-ghost hidden" href="/">Entrar para copiarlo</a>
+      </div>
+      <div id="zones"><div class="spinner"></div></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a href="/terms">Condiciones del servicio</a>
+    <a href="/privacy">Política de privacidad</a>
+  </footer>
+
+  <script type="module" src="/js/shared.js"></script>
+</body>
+</html>

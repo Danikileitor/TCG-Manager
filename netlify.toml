@@ -8,6 +8,11 @@
 
 # Rutas limpias de la API: /api/xxx -> /.netlify/functions/xxx
 [[redirects]]
+  from = "/d/*"
+  to = "/shared.html"
+  status = 200
+
+[[redirects]]
   from = "/api/banlists"
   to = "/.netlify/functions/banlists"
   status = 200

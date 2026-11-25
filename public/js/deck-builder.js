@@ -158,6 +158,9 @@ function showEditor(newDeck) {
   buildTargetZones();
   els.description.value = deck.description || '';
   els.deleteBtn.classList.toggle('hidden', !deck._id);
+  document.getElementById('share-btn').classList.toggle('hidden', !deck._id);
+  document.getElementById('history-btn').classList.toggle('hidden', !deck._id);
+  document.getElementById('share-btn').textContent = deck.shareId ? 'Compartido ✓' : 'Compartir';
   renderZones();
   completeLabels(deck);
   // MTG: la legalidad de las cartas guardadas se consulta a Scryfall (para avisar de prohibidas)
@@ -534,6 +537,33 @@ document.getElementById('stats-btn').addEventListener('click', async () => {
   openDeckStats({ gameKey: game.key, deck: current });
 });
 
+// ---------- Compartir e historial ----------
+document.getElementById('share-btn').addEventListener('click', async () => {
+  if (!deck || !deck._id) return;
+  const { openShareDialog } = await import('./deck-share.js');
+  openShareDialog({ deck, onChange: (id) => { document.getElementById('share-btn').textContent = id ? 'Compartido ✓' : 'Compartir'; } });
+});
+document.getElementById('history-btn').addEventListener('click', async () => {
+  if (!deck || !deck._id) return;
+  const { openHistoryDialog } = await import('./deck-share.js');
+  openHistoryDialog({
+    deck,
+    onRestore: (v) => {
+      // Se carga la versión en el editor conservando el mismo mazo; queda pendiente de guardar
+      deck.name = v.name;
+      deck.format = game.formats.includes(v.format) ? v.format : deck.format;
+      deck.cards = v.cards;
+      deck.cover = deck.cover && v.cards.some((c) => c.cardId === deck.cover.cardId) ? deck.cover : null;
+      els.name.value = deck.name;
+      els.format.value = deck.format;
+      buildTargetZones();
+      markDirty();
+      renderZones();
+      toast('Versión cargada: pulsa "Guardar mazo" para conservarla', 'info');
+    },
+  });
+});
+
 // ---------- Eventos ----------
 els.picker.addEventListener('change', () => openDeck(els.picker.value));
 els.newBtn.addEventListener('click', newDeck);
@@ -627,6 +657,12 @@ async function init() {
   }
   showEditor(null);
   setSource('collection');
+  // /deck-builder?game=...&deck=<id> abre ese mazo directamente (p. ej. tras copiar un mazo compartido)
+  const wanted = new URLSearchParams(window.location.search).get('deck');
+  if (wanted) {
+    els.picker.value = wanted;
+    openDeck(wanted);
+  }
 }
 
 initCardPreview();

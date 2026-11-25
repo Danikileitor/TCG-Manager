@@ -205,6 +205,12 @@ El botón **Estadísticas** del editor de mazos abre un diálogo con tres pesta�
 
 Código en `public/js/deck-stats.js` (se carga solo al abrir el diálogo).
 
+### Precios, compartir mazos e historial
+
+- **Precios (solo MTG)**: en *Estadísticas* se muestra el valor estimado del mazo y, en *Qué me falta*, el precio de cada carta y el coste total. Salen del precio de Cardmarket en euros que Scryfall incluye en cada carta. Para Yu-Gi-Oh! y Digimon no hay una fuente de precios verificada, así que no se muestran.
+- **Compartir**: el botón *Compartir* de un mazo guardado crea un enlace público de solo lectura (`/d/<código>`). Quien lo abre ve las cartas (con vista previa), puede copiar la lista y, si tiene cuenta, copiarlo a sus mazos. No se muestra tu usuario. *Dejar de compartir* desactiva el enlace al instante. El enlace muestra la última versión guardada. Backend: `netlify/functions/shared-deck.js` (pública) y el campo `shareId` de `decks.js`; página `public/shared.html`.
+- **Historial**: cada vez que guardas un mazo con cambios en las cartas se conserva la versión anterior (las 15 últimas, campo `history` en MongoDB, que no viaja en el listado). *Historial* → *Restaurar* carga esa versión en el editor; queda sin guardar hasta que pulses *Guardar mazo*.
+
 ### Prohibidas, limitadas y formato Digimon C / U
 
 En el buscador del editor de mazos, cada carta afectada por la lista del formato elegido muestra en la esquina superior derecha de su imagen un símbolo rojo de prohibido (🚫) o un número amarillo dentro de un círculo rojo (1, 2 o 3 copias). Al cambiar de formato las insignias se actualizan. La misma marca aparece en cada carta del mazo, justo a la izquierda del selector de copias. Además, el editor **no deja añadir** cartas prohibidas ni pasar del límite (mensaje al pulsar "+ Mazo"), y avisa si un mazo importado o cambiado de formato incluye cartas ilegales.

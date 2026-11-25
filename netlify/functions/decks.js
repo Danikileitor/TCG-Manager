@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('./_lib/db');
 const { getUserFromRequest } = require('./_lib/auth');
@@ -82,6 +83,17 @@ exports.handler = async (event) => {
         if (!ObjectId.isValid(qs.id)) return json(400, { error: 'ID no válido' });
         const deck = await col.findOne({ _id: new ObjectId(qs.id), userId: user.id });
         if (!deck) return json(404, { error: 'Mazo no encontrado' });
+        const history = deck.history || [];
+        delete deck.history; // el historial pesa: se pide aparte
+        // Historial: ?history=1 lista las versiones; ?version=N devuelve una (0 = la más reciente)
+        if (qs.history) {
+          return json(200, { versions: history.map((h, i) => ({ index: i, savedAt: h.savedAt, name: h.name, format: h.format, cardCount: (h.cards || []).reduce((s, c) => s + c.quantity, 0) })).reverse() });
+        }
+        if (qs.version !== undefined) {
+          const v = history[parseInt(qs.version, 10)];
+          if (!v) return json(404, { error: 'Versión no encontrada' });
+          return json(200, { version: v });
+        }
         return json(200, { deck });
       }
 
@@ -98,7 +110,7 @@ exports.handler = async (event) => {
           { $sort: { updatedAt: -1 } },
           { $limit: 200 },
           { $addFields: { cardCount: { $sum: '$cards.quantity' }, firstCard: { $arrayElemAt: ['$cards', 0] } } },
-          { $project: { cards: 0, 'firstCard.language': 0, 'firstCard.quantity': 0, 'firstCard.zone': 0 } },
+          { $project: { cards: 0, history: 0, 'firstCard.language': 0, 'firstCard.quantity': 0, 'firstCard.zone': 0 } },
         ])
         .toArray();
       return json(200, { decks });
@@ -161,10 +173,19 @@ exports.handler = async (event) => {
         update.cover = sanitizeCover(body.cover !== undefined ? body.cover : existing.cover, update.cards || existing.cards);
       }
 
+      // Compartir: enlace público de solo lectura (se activa y desactiva; al desactivar el enlace deja de funcionar)
+      if (body.share === true && !existing.shareId) update.shareId = crypto.randomBytes(9).toString('base64url');
+      if (body.share === false) update.shareId = null;
+
+      // Historial: antes de cambiar las cartas se guarda la versión anterior (las 15 últimas)
+      const ops = { $set: update };
+      if (update.cards && JSON.stringify(update.cards) !== JSON.stringify(existing.cards || [])) {
+        ops.$push = { history: { $each: [{ savedAt: existing.updatedAt || new Date(), name: existing.name, format: existing.format, cards: existing.cards || [] }], $slice: -15 } };
+      }
       const result = await col.findOneAndUpdate(
         { _id: existing._id, userId: user.id },
-        { $set: update },
-        { returnDocument: 'after' }
+        ops,
+        { returnDocument: 'after', projection: { history: 0 } }
       );
       return json(200, { deck: result });
     }
