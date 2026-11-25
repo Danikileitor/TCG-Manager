@@ -4,8 +4,7 @@ import { requireSession, loadGame } from './session.js';
 import { searchCatalog, completeForExport, digimonVariantsFor } from './card-providers.js';
 import { displayName } from './card-labels.js';
 import { copiesLeft, copyLimit, overLimit } from './deck-rules.js';
-import { openTransferDialog } from './transfer-dialog.js';
-import { openHandSimulator } from './hand-sim.js';
+// transfer-dialog.js y hand-sim.js (~70 KB) se cargan al usarlos: no retrasan la apertura del editor
 import { createCatalogSearch, resultItem } from './catalog-search.js';
 import { initCardPreview } from './card-viewer.js';
 import { markPreviewable } from './ui.js';
@@ -506,8 +505,9 @@ async function importDeck({ cards, name, deckFormat, description, onProgress }) 
   return `Mazo "${saved.name}" importado${trimmed ? ` (${trimmed} copias omitidas por el límite del formato)` : ''}`;
 }
 
-els.transferBtn.addEventListener('click', () => {
+els.transferBtn.addEventListener('click', async () => {
   if (dirty && !window.confirm('Tienes cambios sin guardar en el mazo abierto; al importar se abrirá el mazo nuevo y se descartarán. ¿Continuar?')) return;
+  const { openTransferDialog } = await import('./transfer-dialog.js');
   openTransferDialog({
     kind: 'deck',
     gameKey: game.key,
@@ -518,9 +518,10 @@ els.transferBtn.addEventListener('click', () => {
 });
 
 // ---------- Mano inicial ----------
-document.getElementById('hand-btn').addEventListener('click', () => {
+document.getElementById('hand-btn').addEventListener('click', async () => {
   const current = currentDeckForExport();
   if (!current || !current.cards.some((c) => c.zone === 'main')) return toast('Añade cartas a la zona principal del mazo para simular una mano', 'error');
+  const { openHandSimulator } = await import('./hand-sim.js');
   openHandSimulator({ gameKey: game.key, deck: current });
 });
 

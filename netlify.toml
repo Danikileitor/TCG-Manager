@@ -120,3 +120,15 @@
   for = "/favicon.ico"
   [headers.values]
     Cache-Control = "public, max-age=86400"
+
+# JS y CSS: el navegador los reutiliza 5 min y los revalida en segundo plano hasta 1 día
+# (la web tiene ~20 módulos; así no se revalidan todos en cada visita)
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300, stale-while-revalidate=86400"

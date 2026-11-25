@@ -858,10 +858,15 @@ export function initCardPreview() {
       const target = e.target.closest && e.target.closest('.previewable');
       if (target && target === tipTarget && !(e.relatedTarget && target.contains(e.relatedTarget))) hideTip();
     });
+    let moveFrame = 0; // como mucho una recolocación por fotograma
     document.addEventListener('mousemove', (e) => {
       mouse = { x: e.clientX, y: e.clientY };
-      if (tip && tip.classList.contains('show')) placeTip();
-    });
+      if (moveFrame || !tip || !tip.classList.contains('show')) return;
+      moveFrame = requestAnimationFrame(() => {
+        moveFrame = 0;
+        placeTip();
+      });
+    }, { passive: true });
     document.addEventListener('mousedown', hideTip);
     document.addEventListener('scroll', hideTip, true);
     window.addEventListener('blur', hideTip);

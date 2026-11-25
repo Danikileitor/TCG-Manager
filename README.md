@@ -122,6 +122,8 @@ Las páginas se enlazan sin extensión (`/home`, `/collection?game=mtg`, `/deck-
 - **Iconos:** se sirven con caché de 1 día.
 - La primera petición tras un rato sin tráfico puede ser más lenta (arranque en frío de la función de Netlify y conexión a Atlas); no se puede evitar en el plan gratuito.
 
+Optimizaciones recientes: el simulador de mano y el diálogo de importar/exportar (~70 KB de JS) se cargan solo al pulsar su botón; `/js/*` y `/css/*` se cachean 5 min con revalidación en segundo plano; la vista previa al pasar el ratón se recoloca como mucho una vez por fotograma.
+
 ## 8. Idiomas de las cartas
 
 En la colección y en el constructor de mazos hay un selector de **idioma de las cartas** que usa los **nombres oficiales** de cada catálogo (nada se traduce). Cada carta guarda el idioma con el que se añadió, y la colección se puede filtrar por idioma. Una carta en español y la misma en inglés son entradas distintas, porque son copias físicas distintas.

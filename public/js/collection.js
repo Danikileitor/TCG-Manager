@@ -8,7 +8,6 @@ import { setupLanguageSelect, langShort } from './language.js';
 import { el, clear, toast, cardThumb, debounce, trashIcon } from './ui.js';
 import { createCollectionFilters, matchesFilters, matchesName, sortCards, SORTS } from './collection-filters.js';
 import { facetsForCards } from './card-providers.js';
-import { openTransferDialog } from './transfer-dialog.js';
 
 const collectionGrid = document.getElementById('collection-grid');
 const resultList = document.getElementById('result-list');
@@ -196,7 +195,8 @@ function buildCatalogSearch() {
   });
 }
 
-document.getElementById('transfer-btn').addEventListener('click', () => {
+document.getElementById('transfer-btn').addEventListener('click', async () => {
+  const { openTransferDialog } = await import('./transfer-dialog.js'); // se carga al usarlo
   openTransferDialog({
     kind: 'collection',
     gameKey: game.key,
