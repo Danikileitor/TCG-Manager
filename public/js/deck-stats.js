@@ -24,32 +24,7 @@ export function probAtLeast(D, K, n, k = 1) {
   return Math.min(1, p);
 }
 
-// ---------- Precios (solo MTG: Scryfall incluye el precio de Cardmarket en cada carta) ----------
-const priceCache = new Map();
-async function mtgPrices(cards) {
-  const ids = [...new Set(cards.map((c) => c.cardId))].filter((id) => /^[0-9a-f-]{36}$/i.test(id) && !priceCache.has(id));
-  for (let i = 0; i < ids.length; i += 75) {
-    try {
-      const res = await fetch('https://api.scryfall.com/cards/collection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ identifiers: ids.slice(i, i + 75).map((id) => ({ id })) }),
-      });
-      if (!res.ok) break;
-      const data = await res.json();
-      (data.data || []).forEach((c) => {
-        const p = c.prices || {};
-        const eur = parseFloat(p.eur || p.eur_foil);
-        priceCache.set(c.id, Number.isFinite(eur) ? eur : null);
-      });
-    } catch (err) {
-      break;
-    }
-    if (i + 75 < ids.length) await new Promise((r) => setTimeout(r, 120));
-  }
-  return priceCache;
-}
-const euro = (n) => `${n.toFixed(2).replace('.', ',')} €`;
+import { mtgPrices, euro } from './prices.js';
 
 const HAND = { mtg: 7, ygo: 5, digimon: 5 };
 const pct = (p) => `${(p * 100).toFixed(p >= 0.995 || p === 0 ? 0 : 1)} %`;

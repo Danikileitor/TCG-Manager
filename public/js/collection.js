@@ -70,8 +70,31 @@ function renderStats(list) {
   clear(statsBox);
   statsBox.append(
     el('span', {}, 'Cartas distintas: ', el('strong', { text: filtered ? `${list.length} de ${cards.length}` : list.length })),
-    el('span', {}, 'Total de copias: ', el('strong', { text: total }))
+    el('span', {}, 'Total de copias: ', el('strong', { text: total })),
+    game.key === 'mtg' ? valueControl(list) : null
   );
+}
+
+// Valor estimado (solo MTG): se calcula a petición porque pide los precios a Scryfall en tandas de 75 cartas
+let valueText = '';
+function valueControl(list) {
+  if (valueText) return el('span', { title: 'Precio de Cardmarket en euros vía Scryfall, sobre las cartas visibles' }, 'Valor: ', el('strong', { text: valueText }));
+  const btn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Calcular valor' });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const { mtgPrices, euro } = await import('./prices.js');
+      const prices = await mtgPrices(list, (done, total) => (btn.textContent = `Calculando… ${done}/${total}`));
+      const priced = list.filter((c) => prices.get(c.cardId) != null);
+      valueText = euro(priced.reduce((sum, c) => sum + prices.get(c.cardId) * c.quantity, 0)) + (priced.length < list.length ? ` (${list.length - priced.length} sin precio)` : '');
+      renderCollection();
+    } catch (err) {
+      toast('No se pudieron obtener los precios', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Calcular valor';
+    }
+  });
+  return btn;
 }
 
 function renderCollection() {

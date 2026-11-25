@@ -222,6 +222,10 @@ Código en `public/js/deck-stats.js` (se carga solo al abrir el diálogo).
 - **Sin conexión (PWA)**: `public/sw.js` guarda páginas, JS, CSS e imágenes propias (se actualizan en segundo plano) y, para tus datos (`/api/collection`, `decks`, `wishlist`...), usa primero la red y, sin conexión, lo último guardado; así se puede consultar la colección y los mazos. Escribir cambios sí requiere conexión. Esa caché de datos se borra al **cerrar sesión**. Si cambias el comportamiento del service worker, sube la versión de `STATIC`/`API` en `sw.js`.
 - **Avisos de listas**: en el editor de mazos (Yu-Gi-Oh! y Digimon), si las listas de prohibidas/limitadas han cambiado desde tu última visita, un aviso indica qué mazos tienen ahora cartas prohibidas o por encima del límite. En MTG no hay aviso global porque la legalidad se consulta por carta; el editor sí avisa dentro de cada mazo.
 
+### Valor de la colección (MTG)
+
+En *Mi colección* de MTG, el botón **Calcular valor** suma el precio (Cardmarket, euros, vía Scryfall) de las cartas visibles según el filtro. Se calcula a petición porque pide los precios en tandas de 75 cartas (una colección grande tarda unos segundos; se muestra el progreso). Código compartido con las estadísticas del mazo en `public/js/prices.js`. No distingue foil/normal (usa el precio de la carta normal, o foil si no hay otro).
+
 ### Prohibidas, limitadas y formato Digimon C / U
 
 En el buscador del editor de mazos, cada carta afectada por la lista del formato elegido muestra en la esquina superior derecha de su imagen un símbolo rojo de prohibido (🚫) o un número amarillo dentro de un círculo rojo (1, 2 o 3 copias). Al cambiar de formato las insignias se actualizan. La misma marca aparece en cada carta del mazo, justo a la izquierda del selector de copias. Además, el editor **no deja añadir** cartas prohibidas ni pasar del límite (mensaje al pulsar "+ Mazo"), y avisa si un mazo importado o cambiado de formato incluye cartas ilegales.
