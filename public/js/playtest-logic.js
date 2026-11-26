@@ -5,7 +5,7 @@ import { shuffle, secureRandom, expandDeck, rulesFor } from './hand-logic.js';
 export const ZONE_DEFS = {
   mtg: { labels: { library: 'Biblioteca', hand: 'Mano', field: 'Campo de batalla', graveyard: 'Cementerio', exile: 'Exilio', extra: 'Zona de mando' }, extraZone: 'commander', extraId: 'extra' },
   ygo: { labels: { library: 'Deck', hand: 'Mano', field: 'Campo', graveyard: 'Cementerio', exile: 'Desterradas', extra: 'Extra Deck' }, extraZone: 'extra', extraId: 'extra' },
-  digimon: { labels: { library: 'Mazo', hand: 'Mano', field: 'Campo', graveyard: 'Descarte', exile: 'Exilio', extra: 'Digi-Egg Deck', security: 'Seguridad' }, extraZone: 'digi-egg', extraId: 'extra', securitySize: 5 },
+  digimon: { labels: { library: 'Deck', hand: 'Mano', field: 'Campo', graveyard: 'Trash', extra: 'Digi-Egg Deck', security: 'Security' }, extraZone: 'digi-egg', extraId: 'extra', securitySize: 5 },
 };
 const FALLBACK = { labels: { library: 'Mazo', hand: 'Mano', field: 'Campo', graveyard: 'Cementerio', exile: 'Exilio' }, extraZone: null };
 export const defsFor = (gameKey) => ZONE_DEFS[gameKey] || FALLBACK;
@@ -42,18 +42,19 @@ export const LAYOUTS = {
       { kind: 'pile', zone: 'library', c: 6, r: 2 },
     ],
   },
-  // Digimon (tapete oficial): pila de seguridad a la izquierda, zona de batalla grande en el centro (ahí van también tamers y
-  // opciones, no tienen zona propia), Mazo sobre Descarte a la derecha y, abajo a la izquierda, el mazo de Digi-Egg junto a la zona de cría
+  // Digimon (tapete oficial): Security a la izquierda (cartas en horizontal apiladas), Battle Area grande en el centro (ahí van también
+  // tamers y opciones, no tienen zona propia), Deck sobre Trash a la derecha y, abajo a la izquierda, la Breeding Area: el Digi-Egg Deck
+  // unido al hueco donde eclosiona el huevo. Los Digimon se apilan unos sobre otros (digievolución).
   digimon: {
-    cols: 8, rows: 4, theme: 'digimon',
+    cols: 8, rows: 4, theme: 'digimon', stacking: true,
     cells: [
-      { kind: 'pile', zone: 'security', c: 0, r: 0 },
-      { kind: 'pile', zone: 'exile', c: 0, r: 1 },
-      { kind: 'free', area: 'battle', label: 'Zona de batalla', c: 1, r: 0, w: 6, h: 3 },
-      { kind: 'pile', zone: 'library', c: 7, r: 1 },
-      { kind: 'pile', zone: 'graveyard', c: 7, r: 2 },
-      { kind: 'pile', zone: 'extra', c: 1, r: 3 },
-      { kind: 'slots', area: 'breeding', label: 'Zona de cría', cells: [[2, 3]] },
+      { kind: 'pile', zone: 'security', c: 0, r: 0, h: 3, landscape: true },
+      { kind: 'free', area: 'battle', label: 'Battle Area', c: 1, r: 0, w: 6, h: 3 },
+      { kind: 'pile', zone: 'library', c: 7, r: 0 },
+      { kind: 'pile', zone: 'graveyard', c: 7, r: 1 },
+      { kind: 'frame', label: 'Breeding Area', c: 0, r: 3, w: 2, h: 1 },
+      { kind: 'pile', zone: 'extra', c: 0, r: 3 },
+      { kind: 'slots', area: 'breeding', label: '', cells: [[1, 3]] },
     ],
   },
 };
@@ -65,7 +66,24 @@ const DEFAULT_LAYOUT = {
   ],
 };
 export const layoutFor = (gameKey) => LAYOUTS[gameKey] || DEFAULT_LAYOUT;
-export const areasOf = (gameKey) => layoutFor(gameKey).cells.filter((c) => c.kind !== 'pile');
+export const areasOf = (gameKey) => layoutFor(gameKey).cells.filter((c) => c.kind === 'slots' || c.kind === 'free');
+export const canStack = (gameKey) => Boolean(layoutFor(gameKey).stacking);
+
+// Agrupa las cartas del campo en pilas (de abajo a arriba): una carta con `onto` está encima de la carta con ese uid
+export function groupStacks(cards) {
+  const byUid = new Map(cards.map((c) => [c.uid, c]));
+  const above = new Map();
+  for (const c of cards) if (c.onto != null && byUid.has(c.onto)) above.set(c.onto, c);
+  const out = [];
+  for (const c of cards) {
+    if (c.onto != null && byUid.has(c.onto)) continue; // no es la base
+    const stack = [c];
+    let nx = above.get(c.uid);
+    while (nx && stack.length < 60) { stack.push(nx); nx = above.get(nx.uid); }
+    out.push(stack);
+  }
+  return out;
+}
 
 // A qué área del tablero va una carta que se juega sin indicar el destino
 export function areaFor(gameKey, card) {
@@ -111,7 +129,8 @@ export function createPlaytest(deckCards, gameKey, rnd = secureRandom) {
     if (t.history.length > HISTORY_MAX) t.history.shift();
   }
   function setup() {
-    t.zones = { library: shuffle(main.map(fresh), rnd), hand: [], field: [], graveyard: [], exile: [], extra: extraCards.map(fresh) };
+    t.zones = { library: shuffle(main.map(fresh), rnd), hand: [], field: [], graveyard: [], extra: extraCards.map(fresh) };
+    if (defs.labels.exile) t.zones.exile = [];
     if (defs.securitySize) t.zones.security = [];
     t.turn = 1;
     t.mulligans = 0;
@@ -152,19 +171,43 @@ export function createPlaytest(deckCards, gameKey, rnd = secureRandom) {
     const [card] = t.zones[at.zone].splice(at.index, 1);
     const stays = to === 'field' && at.zone === 'field'; // dentro del campo se conserva si está girada o boca abajo
     const prevArea = card.area;
-    if (!stays) { card.tapped = false; card.faceDown = to === 'security'; }
+    // Al mover una carta que está encima de otras dentro del campo, la pila entera viaja con ella
+    const below = [];
+    if (stays) {
+      let cur = card;
+      while (cur.onto != null) { const nx = t.zones.field.find((c) => c.uid === cur.onto); if (!nx || below.includes(nx)) break; below.push(nx); cur = nx; }
+    }
+    if (!stays) { card.tapped = false; card.faceDown = to === 'security'; delete card.onto; }
     delete card.area;
     delete card.slot;
     if (to === 'field') {
-      const area = opts.area || (stays && prevArea) || areaFor(gameKey, card);
-      const def = areasOf(gameKey).find((a) => a.area === area) || areasOf(gameKey)[0];
-      card.area = def.area;
-      if (def.kind === 'slots') {
-        const used = new Set(t.zones.field.filter((c) => c.area === def.area).map((c) => c.slot));
-        const free = def.cells.findIndex((_, i) => !used.has(i));
-        card.slot = Number.isInteger(opts.slot) ? opts.slot : free >= 0 ? free : 0;
+      let target = null;
+      if (canStack(gameKey) && opts.onto != null && opts.onto !== uid) {
+        target = t.zones.field.find((c) => c.uid === opts.onto);
+        if (target && below.includes(target)) target = null;
+        while (target) { const up = t.zones.field.find((c) => c.onto === target.uid && c !== card); if (!up) break; target = up; } // se apila sobre la carta de arriba
+      }
+      const base = below.length ? below[below.length - 1] : card;
+      if (target) {
+        base.onto = target.uid;
+        for (const m of [card, ...below]) { m.area = target.area; if (target.slot != null) m.slot = target.slot; m.tapped = target.tapped; }
+      } else {
+        if (stays && base !== card) delete base.onto;
+        else if (stays) delete card.onto;
+        const area = opts.area || (stays && prevArea) || areaFor(gameKey, card);
+        const def = areasOf(gameKey).find((a) => a.area === area) || areasOf(gameKey)[0];
+        const group = [card, ...below];
+        group.forEach((m) => { m.area = def.area; });
+        if (def.kind === 'slots') {
+          const used = new Set(t.zones.field.filter((c) => c.area === def.area && !group.includes(c)).map((c) => c.slot));
+          const free = def.cells.findIndex((_, i) => !used.has(i));
+          const sl = Number.isInteger(opts.slot) ? opts.slot : free >= 0 ? free : 0;
+          group.forEach((m) => { m.slot = sl; });
+        }
       }
     }
+    // Referencias a cartas que ya no están en el campo
+    t.zones.field.forEach((c) => { if (c.onto != null && !t.zones.field.some((x) => x.uid === c.onto)) delete c.onto; });
     if (pos === 'top') t.zones[to].unshift(card);
     else t.zones[to].push(card); // 'bottom' y 'end' coinciden: la biblioteca se lee desde el principio y su fondo es el final
     return true;
@@ -173,8 +216,31 @@ export function createPlaytest(deckCards, gameKey, rnd = secureRandom) {
     const at = t.find(uid);
     if (!at || at.zone !== 'field') return false;
     snapshot();
-    at.card.tapped = !at.card.tapped;
+    const v = !at.card.tapped;
+    const group = new Set([at.card.uid]);
+    let grew = true;
+    while (grew) { grew = false; for (const c of t.zones.field) if (!group.has(c.uid) && ((c.onto != null && group.has(c.onto)) || (group.has(c.uid) === false && [...group].some((g) => t.zones.field.find((x) => x.uid === g)?.onto === c.uid)))) { group.add(c.uid); grew = true; } }
+    t.zones.field.forEach((c) => { if (group.has(c.uid)) c.tapped = v; });
     return true;
+  };
+  // Todas las cartas de la pila de una carta (de abajo a arriba)
+  t.stackOf = (uid) => groupStacks(t.zones.field).find((st) => st.some((c) => c.uid === uid)) || [];
+  // Manda la pila entera de una carta a otra zona (p. ej. un Digimon destruido al Trash)
+  t.moveStack = (uid, to) => {
+    const st = t.stackOf(uid);
+    if (st.length < 2 || !t.zones[to]) return false;
+    snapshot();
+    const saved = t.history.length;
+    for (const c of [...st].reverse()) t.move(c.uid, to);
+    t.history.length = saved; // un solo paso para deshacer
+    return true;
+  };
+  // ¿Hay un Digimon en la Breeding Area?
+  t.breedingBusy = () => t.zones.field.some((c) => c.area === 'breeding');
+  // Eclosión: la primera carta del Digi-Egg Deck pasa a la Breeding Area si está vacía
+  t.hatch = () => {
+    if (gameKey !== 'digimon' || !t.zones.extra.length || t.breedingBusy()) return false;
+    return t.move(t.zones.extra[0].uid, 'field', 'end', { area: 'breeding' });
   };
   t.toggleFace = (uid) => {
     const at = t.find(uid);

@@ -1194,3 +1194,17 @@
 .pt-layout .pt-pile-face { width: var(--cw); height: auto; aspect-ratio: 63 / 88; }
 .pt-layout .pt-field.over { outline: 2px solid var(--accent, #6d7cff); }
 .pt-center { gap: 0.6rem; }
+
+/* ----- Digimon: pilas de digievolución, Security horizontal y Breeding Area ----- */
+.pt-layout .pt-stack { --ch: calc(var(--cw) * 88 / 63); --sh: calc(var(--ch) * (1 + 0.2 * (var(--n) - 1))); position: relative; flex: none; width: var(--cw); height: var(--sh); }
+.pt-layout .pt-stack .pt-card { position: absolute; left: 0; top: calc(var(--ch) * 0.2 * var(--d)); }
+.pt-layout .pt-stack.tapped { transform: rotate(90deg); margin: calc((var(--sh) - var(--cw)) / 2); }
+.pt-layout .pt-slot .pt-stack { grid-area: 1 / 1; }
+.pt-layout .pt-slot .pt-stack .pt-card { grid-area: auto; }
+.pt-layout .pt-frame { position: relative; border: 1px dashed var(--line); background: var(--fill); border-radius: 8px; pointer-events: none; }
+.pt-layout .pt-frame .pt-zone-label { left: auto; right: 0.6rem; }
+.pt-layout .pt-slot.pt-joined { border-color: transparent; background: none; }
+.pt-layout .pt-pile-face.pt-sec { width: calc(var(--cw) * 1.1); aspect-ratio: auto; height: auto; border: 0; background: none; overflow: visible; display: flex; flex-direction: column; align-items: center; gap: 0; }
+.pt-sec-card { position: relative; width: 100%; aspect-ratio: 88 / 63; border-radius: 5px; overflow: hidden; background: #1a2138; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); margin-top: calc(var(--cw) * -0.5); border: 1px solid rgba(255, 255, 255, 0.18); }
+.pt-sec-card:first-child { margin-top: 0; }
+.pt-sec-card > i { position: absolute; left: 50%; top: 50%; width: 71.6%; aspect-ratio: 63 / 88; transform: translate(-50%, -50%) rotate(90deg); background: center / cover linear-gradient(135deg, #2a3350, #151b2e); }

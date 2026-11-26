@@ -3,7 +3,7 @@
 import { el, clear, toast, markPreviewable, safeImageUrl } from './ui.js';
 import { betterImageUrl } from './card-images.js';
 import { findDefaultBack, openCardViewer } from './card-viewer.js';
-import { createPlaytest, defsFor, layoutFor } from './playtest-logic.js';
+import { createPlaytest, defsFor, layoutFor, canStack, groupStacks } from './playtest-logic.js';
 
 export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
   const pt = createPlaytest(deck.cards, gameKey);
@@ -40,9 +40,10 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
   function hideMenu() { menu.classList.add('hidden'); }
 
   // ---------- Cartas ----------
-  function cardEl(card, zone) {
+  function cardEl(card, zone, opts = {}) {
+    const owner = opts.owner || card; // los clics, arrastres y menús de una carta tapada en una pila actúan sobre la carta de arriba
     const hidden = card.faceDown;
-    const node = el('div', { class: `pt-card${card.tapped ? ' tapped' : ''}${hidden ? ' down' : ''}`, draggable: 'true', tabindex: '0', title: hidden ? 'Boca abajo' : card.name, 'data-uid': String(card.uid) });
+    const node = el('div', { class: `pt-card${card.tapped && !opts.stacked ? ' tapped' : ''}${hidden ? ' down' : ''}`, draggable: 'true', tabindex: '0', title: hidden ? 'Boca abajo' : card.name, 'data-uid': String(owner.uid) });
     const src = betterImageUrl(safeImageUrl(card.imageUrl));
     if (hidden) {
       if (backUrl) node.style.backgroundImage = `url("${backUrl}")`;
@@ -52,20 +53,48 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
       node.append(img);
       markPreviewable(node, card);
     } else node.append(el('span', { class: 'pt-name', text: card.name }));
-    node.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(card.uid)); e.dataTransfer.effectAllowed = 'move'; hideMenu(); });
-    node.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(card, zone, e.clientX, e.clientY); });
+    node.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(owner.uid)); e.dataTransfer.effectAllowed = 'move'; hideMenu(); });
+    node.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(owner, zone, e.clientX, e.clientY); });
     // Un clic abre el menú tras una breve espera; si llega un segundo clic (doble clic) se cancela y se juega / gira la carta
     let menuTimer = 0;
-    node.addEventListener('dblclick', () => { clearTimeout(menuTimer); act(() => (zone === 'field' ? pt.toggleTap(card.uid) : pt.move(card.uid, 'field'))); });
-    node.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const r = node.getBoundingClientRect(); openMenu(card, zone, r.left, r.bottom); } });
+    node.addEventListener('dblclick', () => { clearTimeout(menuTimer); if (zone === 'field') act(() => pt.toggleTap(owner.uid)); else playCard(owner, zone); });
+    node.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const r = node.getBoundingClientRect(); openMenu(owner, zone, r.left, r.bottom); } });
     node.addEventListener('click', (e) => {
       e.stopPropagation(); // el clic abre el menú de la carta, no la vista 3D (la vista previa al pasar el ratón sigue funcionando)
       const x = e.clientX;
       const y = e.clientY;
       clearTimeout(menuTimer);
-      menuTimer = setTimeout(() => openMenu(card, zone, x, y), 230);
+      menuTimer = setTimeout(() => openMenu(owner, zone, x, y), 230);
     });
+    if (opts.onto) dropTarget(node, { zone: 'field', area: owner.area, slot: owner.slot, onto: owner.uid });
     return node;
+  }
+
+  const isDigimon = (card) => ((card.facets && card.facets.types) || []).includes('Digimon');
+  // Jugar una carta al campo. En Digimon, un Digimon puede ir a la Battle Area o encima de otro Digimon (digievolución)
+  function playCard(card, zone, x, y) {
+    if (zone === 'field') return;
+    if (canStack(gameKey) && isDigimon(card)) {
+      const stacks = groupStacks(pt.zones.field).filter((st) => st.some((c) => isDigimon(c) || ((c.facets && c.facets.types) || []).includes('Digi-Egg') || c.area === 'breeding'));
+      if (stacks.length) {
+        const r = dialog.getBoundingClientRect();
+        const px = x == null ? r.left + r.width / 2 : x;
+        const py = y == null ? r.top + r.height / 2 : y;
+        clear(menu);
+        menu.append(el('div', { class: 'pt-menu-title', text: `Jugar ${card.name}` }));
+        menu.append(el('button', { type: 'button', role: 'menuitem', text: 'Nuevo en la Battle Area', onClick: () => act(() => pt.move(card.uid, 'field', 'end', { area: 'battle' })) }));
+        stacks.forEach((st) => {
+          const top = st[st.length - 1];
+          menu.append(el('button', { type: 'button', role: 'menuitem', text: `Sobre ${top.name} (${top.area === 'breeding' ? 'Breeding Area' : 'Battle Area'})`, onClick: () => act(() => pt.move(card.uid, 'field', 'end', { area: top.area, slot: top.slot, onto: top.uid })) }));
+        });
+        menu.classList.remove('hidden');
+        menu.style.left = `${Math.min(px - r.left, r.width - 230)}px`;
+        menu.style.top = `${Math.max(0, Math.min(py - r.top, r.height - menu.offsetHeight - 10))}px`;
+        menu.querySelector('button')?.focus();
+        return;
+      }
+    }
+    act(() => pt.move(card.uid, 'field'));
   }
 
   function openMenu(card, zone, x, y) {
@@ -75,7 +104,8 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
     if (!card.faceDown && card.imageUrl) menu.append(el('button', { type: 'button', role: 'menuitem', text: 'Ver en grande (3D)', onClick: () => { hideMenu(); openCardViewer({ name: card.name, imageUrl: card.imageUrl, imageBack: card.imageBack, backKind: card.backKind }); } }));
     if (zone === 'field') item(card.tapped ? 'Enderezar' : 'Girar', () => pt.toggleTap(card.uid));
     item(card.faceDown ? 'Poner boca arriba' : 'Poner boca abajo', () => pt.toggleFace(card.uid));
-    Object.keys(L).filter((z) => z !== zone && z !== 'library').forEach((z) => item(`→ ${L[z]}`, () => pt.move(card.uid, z)));
+    if (zone === 'field' && pt.stackOf(card.uid).length > 1) item(`→ ${L.graveyard} (pila entera)`, () => pt.moveStack(card.uid, 'graveyard'));
+    Object.keys(L).filter((z) => z !== zone && z !== 'library').forEach((z) => (z === 'field' ? menu.append(el('button', { type: 'button', role: 'menuitem', text: `→ ${L.field}`, onClick: () => { hideMenu(); playCard(card, zone, x, y); } })) : item(`→ ${L[z]}`, () => pt.move(card.uid, z))));
     if (zone !== 'library') {
       item(`→ Arriba de ${L.library}`, () => pt.move(card.uid, 'library', 'top'));
       item(`→ Fondo de ${L.library}`, () => pt.move(card.uid, 'library', 'bottom'));
@@ -96,28 +126,48 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
     const zone = target.zone;
     node.addEventListener('dragover', (e) => { e.preventDefault(); node.classList.add('over'); });
     node.addEventListener('dragleave', () => node.classList.remove('over'));
+    node.addEventListener('dragenter', (e) => e.stopPropagation());
     node.addEventListener('drop', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       node.classList.remove('over');
       const uid = parseInt(e.dataTransfer.getData('text/plain'), 10);
-      if (Number.isFinite(uid)) act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot }));
+      if (Number.isFinite(uid)) act(() => pt.move(uid, zone, zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot, onto: target.onto }));
     });
     return node;
   }
 
-  function pile(zone) {
+  function pile(zone, cell = {}) {
     const cards = pt.zones[zone];
     const top = cards[cards.length - 1];
     const face = el('div', { class: 'pt-pile-face' });
-    if (zone === 'library' || zone === 'security' || zone === 'extra' && gameKey === 'digimon') {
+    if (cell.landscape) {
+      // Security: las cartas boca abajo se colocan en horizontal, una sobre otra con el borde visible
+      face.classList.add('pt-sec');
+      for (let i = 0; i < Math.min(cards.length, 9); i++) {
+        const c = el('div', { class: 'pt-sec-card' }, el('i'));
+        if (backUrl) c.firstChild.style.backgroundImage = `url("${backUrl}")`;
+        face.append(c);
+      }
+    } else if (zone === 'library' || zone === 'security' || zone === 'extra' && gameKey === 'digimon') {
       if (backUrl) face.style.backgroundImage = `url("${backUrl}")`;
       else face.classList.add('plain');
     } else if (top && betterImageUrl(safeImageUrl(top.imageUrl)) && !top.faceDown) {
       face.append(el('img', { src: betterImageUrl(safeImageUrl(top.imageUrl)), alt: top.name, draggable: 'false', referrerpolicy: 'no-referrer' }));
     }
-    const node = el('button', { type: 'button', class: 'pt-pile', title: zone === 'library' ? `${L[zone]}: clic para robar · ⋯ para ver` : `${L[zone]}: clic para ver` }, face, el('span', { class: 'pt-count', text: String(cards.length) }), el('span', { class: 'pt-pile-label', text: L[zone] }));
-    node.addEventListener('click', () => (zone === 'library' ? act(() => pt.draw(1)) : openPanel(zone)));
+    const node = el('button', { type: 'button', class: 'pt-pile', title: zone === 'library' ? `${L[zone]}: clic para robar` : gameKey === 'digimon' && zone === 'extra' ? `${L[zone]}: clic para eclosionar el primer huevo en la Breeding Area` : `${L[zone]}: clic para ver` }, face, el('span', { class: 'pt-count', text: String(cards.length) }), el('span', { class: 'pt-pile-label', text: L[zone] }));
+    node.addEventListener('click', () => onPileClick(zone));
     return dropTarget(node, { zone });
+  }
+
+  function onPileClick(zone) {
+    if (zone === 'library') return act(() => pt.draw(1));
+    if (gameKey === 'digimon' && zone === 'extra') {
+      if (!pt.zones.extra.length) return toast('El Digi-Egg Deck está vacío', 'error');
+      if (pt.breedingBusy()) return toast('Ya hay un Digimon en la Breeding Area', 'error');
+      return act(() => pt.hatch());
+    }
+    openPanel(zone);
   }
 
   function openPanel(zone) {
@@ -182,17 +232,41 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
     grid.style.gridTemplateRows = `repeat(${layout.rows}, minmax(0, 1fr))`;
     const place = (node, c, r, w = 1, h = 1) => { node.style.gridColumn = `${c + 1} / span ${w}`; node.style.gridRow = `${r + 1} / span ${h}`; return node; };
     const fieldCards = (area) => pt.zones.field.filter((c) => c.area === area);
+    const stacking = canStack(gameKey);
+    // Las cartas de una zona: en Digimon se agrupan en pilas (la de abajo asoma por debajo de la que va encima)
+    const putCards = (host, cards, area, slot) => {
+      if (!stacking) return cards.forEach((c) => host.append(cardEl(c, 'field')));
+      groupStacks(cards).forEach((st) => {
+        const top = st[st.length - 1];
+        const node = el('div', { class: `pt-stack${top.tapped ? ' tapped' : ''}` });
+        node.style.setProperty('--n', String(st.length));
+        st.forEach((c, i) => {
+          const d = st.length - 1 - i;
+          const cn = cardEl(c, 'field', { stacked: true, owner: top, onto: true });
+          cn.style.setProperty('--d', String(d));
+          cn.style.zIndex = String(i + 1);
+          node.append(cn);
+        });
+        host.append(node);
+      });
+    };
     for (const cell of layout.cells) {
+      if (cell.kind === 'frame') {
+        grid.append(place(el('div', { class: 'pt-frame' }, el('span', { class: 'pt-zone-label', text: cell.label })), cell.c, cell.r, cell.w, cell.h));
+      }
+    }
+    for (const cell of layout.cells) {
+      if (cell.kind === 'frame') continue;
       if (cell.kind === 'pile') {
-        if (pt.zones[cell.zone]) grid.append(place(el('div', { class: 'pt-cell' }, pile(cell.zone)), cell.c, cell.r));
+        if (pt.zones[cell.zone]) grid.append(place(el('div', { class: 'pt-cell' }, pile(cell.zone, cell)), cell.c, cell.r, 1, cell.h || 1));
       } else if (cell.kind === 'free') {
         const area = dropTarget(el('div', { class: 'pt-field pt-area' }, el('span', { class: 'pt-zone-label', text: cell.label })), { zone: 'field', area: cell.area });
-        fieldCards(cell.area).forEach((c) => area.append(cardEl(c, 'field')));
+        putCards(area, fieldCards(cell.area), cell.area);
         grid.append(place(area, cell.c, cell.r, cell.w, cell.h));
       } else {
         cell.cells.forEach(([c, r], i) => {
-          const slot = dropTarget(el('div', { class: 'pt-field pt-slot', title: cell.label }, i === 0 ? el('span', { class: 'pt-zone-label', text: cell.label }) : null), { zone: 'field', area: cell.area, slot: i });
-          pt.zones.field.filter((x) => x.area === cell.area && x.slot === i).forEach((x) => slot.append(cardEl(x, 'field')));
+          const slot = dropTarget(el('div', { class: `pt-field pt-slot${cell.label ? '' : ' pt-joined'}`, title: cell.label }, i === 0 && cell.label ? el('span', { class: 'pt-zone-label', text: cell.label }) : null), { zone: 'field', area: cell.area, slot: i });
+          putCards(slot, pt.zones.field.filter((x) => x.area === cell.area && x.slot === i), cell.area, i);
           grid.append(place(slot, c, r));
         });
       }
@@ -215,9 +289,9 @@ export async function openPlaytest({ gameKey, deck, mode = '2d' }) {
         stage, pt, L, gameKey,
         getBackUrl: () => findDefaultBack(''),
         onMenu: (card, zone, x, y) => openMenu(card, zone, x, y),
-        onDouble: (card, zone) => act(() => (zone === 'field' ? pt.toggleTap(card.uid) : pt.move(card.uid, 'field'))),
-        onPile: (zone) => (zone === 'library' ? act(() => pt.draw(1)) : openPanel(zone)),
-        onDrop: (uid, target) => act(() => pt.move(uid, target.zone, target.zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot })),
+        onDouble: (card, zone) => (zone === 'field' ? act(() => pt.toggleTap(card.uid)) : playCard(card, zone)),
+        onPile: (zone) => onPileClick(zone),
+        onDrop: (uid, target) => act(() => pt.move(uid, target.zone, target.zone === 'library' ? 'top' : 'end', { area: target.area, slot: target.slot, onto: target.onto })),
       });
       dialog._scene = scene; // (para pruebas)
       return true;

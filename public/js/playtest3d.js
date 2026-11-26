@@ -4,7 +4,7 @@
 import { el } from './ui.js';
 import { mat, makeGenericBack } from './card-viewer.js';
 import { loadCardImage, fitFor, placeholderCanvas } from './hand-sim.js';
-import { layoutFor, areasOf } from './playtest-logic.js';
+import { layoutFor, areasOf, canStack, groupStacks } from './playtest-logic.js';
 
 const ASPECT = 63 / 88;
 const FOV = (34 * Math.PI) / 180;
@@ -83,8 +83,9 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
   // Destinos donde se puede soltar una carta, de más específico a menos
   const targets = [];
   const pileCells = [];
+  const PEEK = 0.22; // cuánto asoma la carta de abajo en una pila de Digimon
   for (const cell of layout.cells) {
-    if (cell.kind === 'pile') { if (pt.zones[cell.zone]) { const r = cellRect(cell.c, cell.r); pileCells.push({ zone: cell.zone, rect: r }); targets.push({ zone: cell.zone, rect: r }); } }
+    if (cell.kind === 'pile') { if (pt.zones[cell.zone]) { const r = cellRect(cell.c, cell.r, 1, cell.h || 1); pileCells.push({ zone: cell.zone, rect: r, landscape: Boolean(cell.landscape) }); targets.push({ zone: cell.zone, rect: r }); } }
     else if (cell.kind === 'slots') cell.cells.forEach(([c, r], i) => targets.push({ zone: 'field', area: cell.area, slot: i, rect: cellRect(c, r) }));
     else targets.push({ zone: 'field', area: cell.area, rect: cellRect(cell.c, cell.r, cell.w, cell.h) });
   }
@@ -177,23 +178,45 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
     items = [];
     const push = (card, zone, tgt) => items.push({ uid: card.uid, card, zone, tgt: { x: 0, y: 0, z: 0.01, rx: 0, rz: 0, ry: card.faceDown ? Math.PI : 0, s: 1, dim: 1, ...tgt } });
     const counters = {};
-    pt.zones.field.forEach((c) => {
-      const key = c.area || '';
-      const i = counters[key] || 0;
-      counters[key] = i + 1;
-      const p = areaCardPos(c, i);
-      push(c, 'field', { x: p.x, y: p.y, z: 0.02 + i * 0.001, rz: c.tapped ? -Math.PI / 2 : 0 });
-    });
+    const place = (c, k, extra = {}) => {
+      const p = areaCardPos(c, k);
+      return { x: p.x, y: p.y, z: 0.02 + k * 0.001, rz: c.tapped ? -Math.PI / 2 : 0, ...extra };
+    };
+    if (canStack(gameKey)) {
+      // Digimon: las cartas de una pila se escalonan para que asome la de abajo (su efecto heredado)
+      groupStacks(pt.zones.field).forEach((st) => {
+        const top = st[st.length - 1];
+        const key = st[0].area || '';
+        const k = counters[key] || 0;
+        counters[key] = k + 1;
+        st.forEach((c, idx) => {
+          const d = st.length - 1 - idx;
+          const t = place(top, k, { z: 0.02 + k * 0.012 + idx * 0.004 });
+          const dx = top.tapped ? -d * PEEK : 0;
+          const dy = top.tapped ? 0 : -d * PEEK;
+          push(c, 'field', { ...t, x: t.x + dx, y: t.y + dy });
+          items[items.length - 1].owner = top.uid;
+          items[items.length - 1].d = d;
+        });
+      });
+    } else {
+      pt.zones.field.forEach((c) => {
+        const key = c.area || '';
+        const k = counters[key] || 0;
+        counters[key] = k + 1;
+        push(c, 'field', place(c, k));
+      });
+    }
     const n = pt.zones.hand.length;
     const step = Math.min(0.9, (bw - 1) / Math.max(1, n));
     const hy = mid(HAND).y - 0.05;
     pt.zones.hand.forEach((c, i) => push(c, 'hand', { x: (i - (n - 1) / 2) * step, y: hy, z: 0.45 + i * 0.002, rx: 0.5, s: 1.12 }));
-    piles = pileCells.map(({ zone, rect }) => {
+    piles = pileCells.map(({ zone, rect, landscape }) => {
       const list = pt.zones[zone];
       const top = list[list.length - 1];
       const showFace = (zone === 'graveyard' || zone === 'exile' || (zone === 'extra' && gameKey !== 'digimon' && gameKey !== 'ygo')) && top && !top.faceDown;
       const m = mid(rect);
-      return { zone, count: list.length, x: m.x, y: m.y + 0.12, top, showFace, rect };
+      return { zone, count: list.length, x: m.x, y: m.y + 0.12, top, showFace, rect, landscape };
     });
     const lib = piles.find((p) => p.zone === 'library') || { x: 0, y: 0 };
     // Posición actual de las cartas nuevas: salen de la pila de la biblioteca
@@ -324,12 +347,19 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
     outline(HAND, rgba(theme.accent, 0.25));
     drawLabel(`${L.hand} (${pt.zones.hand.length})`, HAND.x0 + 0.1, HAND.y1 - 0.14);
     for (const cell of layout.cells) {
+      if (cell.kind !== 'frame') continue;
+      const rc = inset(cellRect(cell.c, cell.r, cell.w, cell.h), 0.05);
+      rect(rc.x0, rc.x1, rc.y0, rc.y1, -0.007, rgba(theme.accent, 0.05));
+      outline(rc, rgba(theme.accent, 0.4));
+      drawLabel(cell.label, rc.x1 - 0.1 - (labelCanvas(cell.label).width * 0.17) / labelCanvas(cell.label).height, rc.y1 - 0.13);
+    }
+    for (const cell of layout.cells) {
       if (cell.kind === 'slots') {
         cell.cells.forEach(([c, r], i) => {
           const rc = inset(cellRect(c, r), 0.05);
           rect(rc.x0, rc.x1, rc.y0, rc.y1, -0.006, rgba(theme.accent, 0.06));
           outline(rc, rgba(theme.accent, 0.5));
-          if (i === 0) drawLabel(cell.label, rc.x0 + 0.06, rc.y1 - 0.13);
+          if (i === 0 && cell.label) drawLabel(cell.label, rc.x0 + 0.06, rc.y1 - 0.13);
         });
       } else if (cell.kind === 'free') {
         const rc = inset(cellRect(cell.c, cell.r, cell.w, cell.h), 0.05);
@@ -347,6 +377,17 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
       rect(pr.x0, pr.x1, pr.y0, pr.y1, -0.006, rgba(theme.accent, 0.06));
       outline(pr, rgba(theme.accent, 0.4));
       drawLabel(`${L[p.zone] || p.zone} · ${p.count}`, (pr.x0 + pr.x1) / 2, pr.y0 + 0.13, 'center');
+      if (p.landscape) {
+        // Security: cartas boca abajo en horizontal, apiladas hacia abajo con el borde visible
+        const n = Math.min(p.count, 9);
+        for (let i = 0; i < n; i++) {
+          const c = { x: (pr.x0 + pr.x1) / 2, y: pr.y1 - 0.6 - i * 0.3, z: 0.005 + i * 0.012, rx: 0, rz: Math.PI / 2, ry: Math.PI, s: 0.98, dim: 0.95 };
+          drawQuad('back', mat.multiply(pv, modelOf(c)), texFor(back.src), 0.92, 0, back.fit);
+        }
+        const bottom = pr.y1 - 0.6 - Math.max(0, n - 1) * 0.3 - 0.4;
+        quads.push({ key: `pile:${p.zone}`, pts: rectPoly({ x0: pr.x0, x1: pr.x1, y0: Math.max(bottom, pr.y0), y1: pr.y1 }, 0.05), z: -1 });
+        continue;
+      }
       const layers = Math.min(6, Math.ceil(p.count / 8));
       const base = { x: p.x, y: p.y, rx: 0, rz: 0, s: 0.98, dim: 0.95 };
       for (let i = 0; i < layers; i++) {
@@ -368,8 +409,9 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
       const st = anim.get(it.uid);
       if (!st) continue;
       let tgt = { ...st.tgt };
-      if (drag && drag.uid === it.uid) tgt = { ...tgt, x: drag.x, y: drag.y, z: 1.1, rx: 0.25, rz: 0, s: 1.15 };
-      else if (hoverKey === it.uid) tgt = { ...tgt, z: tgt.z + 0.4, s: tgt.s * 1.12, rx: it.zone === 'hand' ? 0.9 : tgt.rx, y: it.zone === 'hand' ? tgt.y + 0.3 : tgt.y };
+      const own = it.owner ?? it.uid;
+      if (drag && drag.uid === own) tgt = { ...tgt, x: drag.x, y: drag.y - (it.d || 0) * PEEK, z: 1.1 - (it.d || 0) * 0.01, rx: 0.25, rz: 0, s: 1.15 };
+      else if (hoverKey === own) tgt = { ...tgt, z: tgt.z + 0.4, s: tgt.s * 1.12, rx: it.zone === 'hand' ? 0.9 : tgt.rx, y: it.zone === 'hand' ? tgt.y + 0.3 : tgt.y };
       for (const key of ['x', 'y', 'z', 'rx', 'rz', 'ry', 's']) st.cur[key] += (tgt[key] - st.cur[key]) * k;
       const c = st.cur;
       const model = modelOf(c);
@@ -378,7 +420,7 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
       const f = frontFor(it.card);
       drawQuad('front', mvp, texFor(f.src), 1, 0, f.fit);
       drawQuad('back', mvp, texFor(back.src), 1, 0, back.fit);
-      quads.push({ key: it.uid, pts: project(mvp, [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]]), z: c.z });
+      quads.push({ key: own, pts: project(mvp, [[-a, -0.5], [a, -0.5], [a, 0.5], [-a, 0.5]]), z: c.z });
     }
   }
 
@@ -392,6 +434,11 @@ export function createScene({ stage, pt, L, gameKey, getBackUrl, onMenu, onDoubl
   // Destino bajo el puntero: { zone, area?, slot? } (se mira el punto sobre el plano de la mesa)
   const targetAt = (px, py) => {
     const w = unproject(px, py);
+    if (canStack(gameKey)) {
+      // Soltar sobre un Digimon (o el huevo) de la mesa: digievolución
+      const over = items.find((i) => i.zone === 'field' && (i.owner ?? i.uid) === i.uid && (!drag || i.uid !== drag.uid) && Math.abs(w.x - i.tgt.x) <= (i.card.tapped ? 0.52 : 0.38) && Math.abs(w.y - i.tgt.y) <= (i.card.tapped ? 0.38 : 0.52));
+      if (over) return { zone: 'field', area: over.card.area, slot: over.card.slot, onto: over.uid };
+    }
     const t = targets.find((x) => inRect(x.rect, w.x, w.y));
     return t ? { zone: t.zone, area: t.area, slot: t.slot } : null;
   };
